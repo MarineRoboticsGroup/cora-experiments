@@ -27,9 +27,11 @@ def run_cora(
         assert experiment_dir is not None
         experiment_fpath = os.path.join(experiment_dir, "factor_graph.mat")
 
-    # we run CORA by calling the 'cora_main.m' script in MATLAB
-    assert os.path.isfile(experiment_fpath), f"File does not exist: {experiment_fpath}"
+    assert os.path.isfile(
+        experiment_fpath
+    ), f"Experiment file does not exist: {experiment_fpath}"
 
+    # start MATLAB engine
     eng = matlab.engine.start_matlab()
 
     # navigate to the directory where the script is located (${HOME}/range-only-slam-mission-control/cora/MATLAB)
@@ -39,7 +41,7 @@ def run_cora(
     # add all subdirectories to the MATLAB path
     eng.addpath(eng.genpath(cora_dir), nargout=0)
 
-    # run the script
+    # run the Python/MATLAB entry point script for CORA
     eng.cora_python_interface(
         experiment_fpath, animation_show_gt, look_for_cached_solns, nargout=0
     )
