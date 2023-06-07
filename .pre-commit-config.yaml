@@ -1,0 +1,21 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+    -   id: check-yaml
+    -   id: trailing-whitespace
+        exclude_types: [html]
+-   repo: https://github.com/psf/black
+    rev: 22.3.0
+    hooks:
+    -    id: black
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v0.910
+    hooks:
+    -   id: mypy
+        additional_dependencies: [attrs==22.1.0]
+-   repo: https://github.com/hadialqattan/pycln
+    rev: v2.1.4 # Possible releases: https://github.com/hadialqattan/pycln/releases
+    hooks:
+      - id: pycln
+        args: [--config=pyproject.toml]
