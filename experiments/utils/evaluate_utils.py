@@ -6,8 +6,8 @@ from typing import List, Dict, Tuple
 from py_factor_graph.io.pickle_file import parse_pickle_file
 from py_factor_graph.factor_graph import FactorGraphData
 from py_factor_graph.utils.solver_utils import save_to_tum
-from ro_slam.solve_mle_gtsam import solve_mle_gtsam
-from ro_slam.utils.gtsam_utils import GtsamSolverParams
+from ra_slam.solve_mle_gtsam import solve_mle_gtsam
+from ra_slam.utils.gtsam_utils import GtsamSolverParams
 
 import matplotlib.pyplot as plt
 import pandas as pd

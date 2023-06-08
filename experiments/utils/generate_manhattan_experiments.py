@@ -1,5 +1,6 @@
 import math
-from os.path import join, expanduser, dirname, abspath, isdir
+from os.path import join, dirname, abspath, isdir
+from os import makedirs
 from py_factor_graph.io.pickle_file import parse_pickle_file
 from manhattan.simulator.simulator import ManhattanSimulator, SimulationParams
 from attrs import field, define
@@ -22,8 +23,10 @@ coloredlogs.install(
 )
 
 
-# get the pyfg_to_matlab directory which is two levels up from this file
-PYFG_TO_MATLAB_DIR = join(dirname(dirname(abspath(__file__))), "pyfg_to_matlab")
+REPO_BASE_DIR = join(dirname(dirname(dirname(dirname(abspath(__file__))))))
+assert isdir(REPO_BASE_DIR), f"REPO_BASE_DIR: {REPO_BASE_DIR} is not a directory"
+
+PYFG_TO_MATLAB_DIR = join(REPO_BASE_DIR, "pyfg_to_matlab")
 assert isdir(PYFG_TO_MATLAB_DIR)
 
 # insert the pyfg_to_matlab directory into the path
@@ -163,9 +166,11 @@ def run_manhattan_simulator(exp_save_dir: str, exp_params: ManhattanExpParam) ->
 
 
 def generate_manhattan_experiments(
-    base_dir: str = expanduser("~/experimental_data/manhattan/cert"),
+    base_dir: str = join(REPO_BASE_DIR, "data", "manhattan")
 ):
-    raise NotImplementedError("Need to convert to using the in-repo data directory")
+    if not isdir(base_dir):
+        makedirs(base_dir)
+
     for experiment in MANHATTAN_EXPERIMENTS:
         # default values
         num_robots_list = [4]
@@ -245,7 +250,6 @@ def generate_manhattan_experiments(
             num_loop_closures_list,
             range_cov_list,
         ):
-            # /home/alan/experimental_data/manhattan/cert/100loop_closures/sweep_num_poses/factor_graph_4robots_0.5rangeStddev_10000poses_500ranges_101loopClosures_29997seed
             (
                 num_robots,
                 num_beacons,
