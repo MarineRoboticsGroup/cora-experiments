@@ -1,12 +1,10 @@
 import numpy as np
-from os.path import dirname, abspath, join
+from os.path import join
 from evo.tools import plot
 from py_factor_graph.io.plaza_experiments import parse_plaza_files
 
-import sys
-
-sys.path.insert(0, dirname(abspath(__file__)))
-from utils.run_experiments import run_experiments, ExperimentConfigs
+from .utils.run_experiments import run_experiments, ExperimentConfigs
+from .utils.paths import DATA_DIR
 
 import logging, coloredlogs
 
@@ -26,8 +24,6 @@ coloredlogs.install(
 if __name__ == "__main__":
     run_noisy_experiments = False  # whether to add artificial noise to the problem and also run CORA on the noisy problems
 
-    THIS_DIR = dirname(abspath(__file__))
-    DATA_DIR = join(dirname(dirname(THIS_DIR)), "data")
     PLAZA_DIR = join(DATA_DIR, "plaza")
     PLAZA_EXPERIMENTS = ["Plaza1", "Plaza2"]
     PLAZA_EXPERIMENT_DIRS = [join(PLAZA_DIR, exp) for exp in PLAZA_EXPERIMENTS]

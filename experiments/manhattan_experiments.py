@@ -1,9 +1,4 @@
-from os.path import dirname, abspath
-
-import sys
-
-sys.path.insert(0, dirname(abspath(__file__)))
-from manhattan_utils.generate_experiments import generate_manhattan_experiments
+from .utils.generate_manhattan_experiments import generate_manhattan_experiments
 import logging, coloredlogs
 
 logger = logging.getLogger(__name__)

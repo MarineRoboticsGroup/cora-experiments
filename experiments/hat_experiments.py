@@ -1,14 +1,11 @@
 import numpy as np
 from py_factor_graph.io.pyfg_text import read_from_pyfg_text
 
-from os.path import dirname, abspath, join
+from os.path import join
 from evo.tools import plot
 
-# insert the current of this file into the path
-import sys
-
-sys.path.insert(0, dirname(abspath(__file__)))
-from utils.run_experiments import run_experiments, ExperimentConfigs
+from .utils.run_experiments import run_experiments, ExperimentConfigs
+from .utils.paths import DATA_DIR
 
 import logging, coloredlogs
 
@@ -28,9 +25,6 @@ coloredlogs.install(
 if __name__ == "__main__":
     run_noisy_experiments = False  # whether to add artificial noise to the problem and also run CORA on the noisy problems
 
-    # the data directory is two levels up from this file
-    THIS_DIR = dirname(abspath(__file__))
-    DATA_DIR = join(dirname(dirname(THIS_DIR)), "data")
     MARINE_DIR = join(DATA_DIR, "marine")
 
     BASE_EXPERIMENT = {

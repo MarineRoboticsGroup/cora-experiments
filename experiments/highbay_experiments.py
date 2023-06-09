@@ -1,12 +1,10 @@
 import numpy as np
-from os.path import dirname, abspath, join
+from os.path import join
 from evo.tools import plot
 from py_factor_graph.io.pyfg_text import read_from_pyfg_text
 
-import sys
-
-sys.path.insert(0, dirname(abspath(__file__)))
-from utils.run_experiments import run_experiments, ExperimentConfigs
+from .utils.run_experiments import run_experiments, ExperimentConfigs
+from .utils.paths import DATA_DIR
 
 
 import logging, coloredlogs
@@ -27,8 +25,6 @@ if __name__ == "__main__":
     run_noisy_experiments = False  # whether to add artificial noise to the problem and also run CORA on the noisy problems
 
     # the data directory is two levels up from this file
-    THIS_DIR = dirname(abspath(__file__))
-    DATA_DIR = join(dirname(dirname(THIS_DIR)), "data")
     HIGHBAY_DIR = join(DATA_DIR, "hexcopter_highbay")
 
     BASE_EXPERIMENT = {
