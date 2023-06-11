@@ -1,12 +1,14 @@
 import math
-from os.path import join, dirname, abspath, isdir
 from os import makedirs
+from os.path import join, isdir, isfile
+from typing import List
 from py_factor_graph.io.pickle_file import parse_pickle_file
 from manhattan.simulator.simulator import ManhattanSimulator, SimulationParams
 from attrs import field, define
 from itertools import product
 import numpy as np
 
+from .paths import REPO_BASE_DIR
 
 import logging, coloredlogs
 
@@ -23,27 +25,37 @@ coloredlogs.install(
 )
 
 
-REPO_BASE_DIR = join(dirname(dirname(dirname(dirname(abspath(__file__))))))
-assert isdir(REPO_BASE_DIR), f"REPO_BASE_DIR: {REPO_BASE_DIR} is not a directory"
-
-PYFG_TO_MATLAB_DIR = join(REPO_BASE_DIR, "pyfg_to_matlab")
-assert isdir(PYFG_TO_MATLAB_DIR)
-
 # insert the pyfg_to_matlab directory into the path
 import sys
 
-sys.path.insert(0, PYFG_TO_MATLAB_DIR)
+sys.path.insert(0, REPO_BASE_DIR)
 from pyfg_to_matlab.matlab_interfaces import export_fg_to_matlab_cora_format
 
+MANHATTAN_DEFAULT_EXP = "default"
+SWEEP_NUM_ROBOTS = "sweep_num_robots"
+SWEEP_RANGE_COV = "sweep_range_cov"
+SWEEP_NUM_RANGES = "sweep_num_ranges"
+SWEEP_NUM_POSES = "sweep_num_poses"
+SWEEP_NUM_BEACONS = "sweep_num_beacons"
+SWEEP_NUM_LOOP_CLOSURES = "sweep_num_loop_closures"
+
 MANHATTAN_EXPERIMENTS = [
-    "default",
-    "sweep_num_robots",
-    "sweep_range_cov",
-    "sweep_num_ranges",
-    "sweep_num_poses",
-    "sweep_num_beacons",
-    "sweep_num_loop_closures",
+    SWEEP_NUM_ROBOTS,
+    SWEEP_RANGE_COV,
+    SWEEP_NUM_RANGES,
+    SWEEP_NUM_POSES,
+    SWEEP_NUM_BEACONS,
+    SWEEP_NUM_LOOP_CLOSURES,
 ]
+
+EXPERIMENT_TRAILING_STR = {
+    SWEEP_NUM_ROBOTS: "robots",
+    SWEEP_NUM_BEACONS: "beacons",
+    SWEEP_NUM_LOOP_CLOSURES: "loopClosures",
+    SWEEP_NUM_POSES: "poses",
+    SWEEP_NUM_RANGES: "ranges",
+    SWEEP_RANGE_COV: "rangeStddev",
+}
 
 
 @define
@@ -57,20 +69,21 @@ class ManhattanExpParam:
 
     def get_experiment_param_as_string(self, exp_name: str) -> str:
         assert exp_name in MANHATTAN_EXPERIMENTS
+        trailing_string = EXPERIMENT_TRAILING_STR[exp_name]
         if exp_name == "default":
             return "default"
         elif exp_name == "sweep_num_robots":
-            return f"{self.num_robots}robots"
+            return f"{self.num_robots}{trailing_string}"
         elif exp_name == "sweep_range_cov":
-            return f"{np.sqrt(self.range_cov):.3}rangeStddev"
+            return f"{np.sqrt(self.range_cov):.3}{trailing_string}"
         elif exp_name == "sweep_num_ranges":
-            return f"{self.num_range_measurements}ranges"
+            return f"{self.num_range_measurements}{trailing_string}"
         elif exp_name == "sweep_num_poses":
-            return f"{self.total_num_poses}poses"
+            return f"{self.total_num_poses}{trailing_string}"
         elif exp_name == "sweep_num_beacons":
-            return f"{self.num_beacons}beacons"
+            return f"{self.num_beacons}{trailing_string}"
         elif exp_name == "sweep_num_loop_closures":
-            return f"{self.num_loop_closures}loopClosures"
+            return f"{self.num_loop_closures}{trailing_string}"
         else:
             raise ValueError(f"Unknown experiment: {exp_name}")
 
@@ -150,13 +163,6 @@ def run_manhattan_simulator(exp_save_dir: str, exp_params: ManhattanExpParam) ->
         sim.close_plot()
 
     filename = "factor_graph"
-    filename += f"_{num_robots}robots"
-    filename += f"_{np.sqrt(range_cov):.3}rangeStddev"
-    filename += f"_{total_num_poses}poses"
-    filename += f"_{num_range_measurements}ranges"
-    filename += f"_{sim._factor_graph.num_loop_closures}loopClosures"
-    filename += f"_{seed}seed"
-
     save_filepath = sim.save_simulation_data(
         exp_save_dir, format="pickle", filename=filename
     )
@@ -166,12 +172,14 @@ def run_manhattan_simulator(exp_save_dir: str, exp_params: ManhattanExpParam) ->
 
 
 def generate_manhattan_experiments(
-    base_dir: str = join(REPO_BASE_DIR, "data", "manhattan")
+    base_dir: str,
+    experiments: List[str] = MANHATTAN_EXPERIMENTS,
+    use_cached_experiments: bool = False,
 ):
     if not isdir(base_dir):
         makedirs(base_dir)
 
-    for experiment in MANHATTAN_EXPERIMENTS:
+    for experiment in experiments:
         # default values
         num_robots_list = [4]
         range_cov_list = [(0.5**2)]
@@ -274,14 +282,30 @@ def generate_manhattan_experiments(
             subexp_dir = join(param_sweep_base_dir, sweep_subexp_dirname)
 
             # run the simulator and save the factor graph to a pickle file
-            factor_graph_file = run_manhattan_simulator(subexp_dir, packaged_params)
+            expected_saved_fg_fpath = join(subexp_dir, "factor_graph.pickle")
+            if use_cached_experiments and isfile(expected_saved_fg_fpath):
+                logger.warning(
+                    "Found cached manhattan experiment - not generating a new one!"
+                )
+                factor_graph_file = expected_saved_fg_fpath
+            else:
+                factor_graph_file = run_manhattan_simulator(subexp_dir, packaged_params)
 
             # convert the data to our matlab format
             fg = parse_pickle_file(factor_graph_file)
-            mat_file = factor_graph_file.replace(".pickle", ".mat")
-            export_fg_to_matlab_cora_format(fg, matlab_filepath=mat_file)
+            expected_saved_matlab_fpath = join(subexp_dir, "factor_graph.mat")
+            if use_cached_experiments and isfile(expected_saved_matlab_fpath):
+                logger.warning(
+                    "Found cached MATLAB version of experiment - not generating a new one!"
+                )
+            else:
+                mat_file = factor_graph_file.replace(".pickle", ".mat")
+                export_fg_to_matlab_cora_format(fg, matlab_filepath=mat_file)
             print()
 
 
 if __name__ == "__main__":
-    generate_manhattan_experiments()
+    from .paths import REPO_BASE_DIR
+
+    manhattan_data_dir = join(REPO_BASE_DIR, "data", "manhattan")
+    generate_manhattan_experiments(manhattan_data_dir)

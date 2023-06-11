@@ -1,4 +1,9 @@
-from .utils.generate_manhattan_experiments import generate_manhattan_experiments
+from utils.generate_manhattan_experiments import (
+    MANHATTAN_EXPERIMENTS,
+)
+from utils.evaluate_manhattan_data import make_manhattan_experiment_plots
+from utils.solve_manhattan_problems import solve_manhattan_problems_in_dir
+from utils.paths import MANHATTAN_DATA_DIR
 import logging, coloredlogs
 
 logger = logging.getLogger(__name__)
@@ -14,6 +19,11 @@ coloredlogs.install(
 )
 
 if __name__ == "__main__":
-    generate_manhattan_experiments()
-
-    raise NotImplementedError("TODO: implement this")
+    experiments = MANHATTAN_EXPERIMENTS
+    # generate_manhattan_experiments(MANHATTAN_DATA_DIR, experiments=experiments, use_cached_experiments=True)
+    solve_manhattan_problems_in_dir(
+        MANHATTAN_DATA_DIR, use_cached_results=True, show_animations=False
+    )
+    make_manhattan_experiment_plots(
+        base_experiment_dir=MANHATTAN_DATA_DIR, subexperiment_types=experiments
+    )

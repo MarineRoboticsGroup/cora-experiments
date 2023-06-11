@@ -9,6 +9,7 @@ def run_cora(
     ),
     experiment_fpath: Optional[str] = None,
     experiment_dir: Optional[str] = None,
+    show_animation: bool = True,
     animation_show_gt: bool = True,
     look_for_cached_solns: bool = False,
 ):
@@ -43,5 +44,9 @@ def run_cora(
 
     # run the Python/MATLAB entry point script for CORA
     eng.cora_python_interface(
-        experiment_fpath, animation_show_gt, look_for_cached_solns, nargout=0
+        experiment_fpath,
+        show_animation,
+        animation_show_gt,
+        look_for_cached_solns,
+        nargout=0,
     )
