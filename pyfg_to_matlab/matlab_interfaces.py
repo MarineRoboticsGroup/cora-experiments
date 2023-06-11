@@ -61,6 +61,7 @@ def export_fg_to_matlab_cora_format(fg: FactorGraphData, matlab_filepath: str) -
     stacked_constraints = get_constraints(fg)
     stacked_constraints = convert_torch_tensor_to_scipy_sparse(stacked_constraints)
     timestamps = np.array(_get_timestamps(fg))
+    assert all([not tstamp is None for tstamp in timestamps])
     mats = {
         "Q": Q,
         "stacked_constraints": stacked_constraints,
