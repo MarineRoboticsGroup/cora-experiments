@@ -1,5 +1,6 @@
 from utils.generate_manhattan_experiments import (
     MANHATTAN_EXPERIMENTS,
+    generate_manhattan_experiments,
 )
 from utils.evaluate_manhattan_data import make_manhattan_experiment_plots
 from utils.solve_manhattan_problems import solve_manhattan_problems_in_dir
@@ -20,10 +21,14 @@ coloredlogs.install(
 
 if __name__ == "__main__":
     experiments = MANHATTAN_EXPERIMENTS
-    # generate_manhattan_experiments(MANHATTAN_DATA_DIR, experiments=experiments, use_cached_experiments=True)
+    generate_manhattan_experiments(
+        MANHATTAN_DATA_DIR, experiments=experiments, use_cached_experiments=True
+    )
     solve_manhattan_problems_in_dir(
         MANHATTAN_DATA_DIR, use_cached_results=True, show_animations=False
     )
     make_manhattan_experiment_plots(
-        base_experiment_dir=MANHATTAN_DATA_DIR, subexperiment_types=experiments
+        base_experiment_dir=MANHATTAN_DATA_DIR,
+        subexperiment_types=experiments,
+        use_cached_results=True,
     )
