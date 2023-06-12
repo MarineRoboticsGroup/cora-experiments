@@ -162,7 +162,7 @@ def _get_cora_tum_files(results_dir: str, num_robots: int) -> List[str]:
 
 
 def evaluate_results(
-    results_dir: str, clear_prev_files: bool = True
+    results_dir: str, clear_prev_files: bool = False
 ) -> Tuple[TrajErrorDfs, ResultsPoseTrajCollection]:
     """Performs evaluation of the generated results. Expects the following files
     in the results_dir:
@@ -177,7 +177,9 @@ def evaluate_results(
     check_dir_ready_for_evaluation(results_dir)
     aligned_results_pickle_path = os.path.join(results_dir, ALIGNED_RESULTS_FNAME)
     if os.path.exists(aligned_results_pickle_path) and not clear_prev_files:
-        print(f"Loading aligned results from {aligned_results_pickle_path}")
+        logger.warning(
+            f"Found cached aligned results, loading from {aligned_results_pickle_path}"
+        )
         aligned_results = pickle.load(open(aligned_results_pickle_path, "rb"))
     else:
         print(f"Aligning results in {results_dir}")
@@ -189,7 +191,7 @@ def evaluate_results(
 
         # clear the previously generated files if requested
         if clear_prev_files:
-            print(f"Clearing previously generated files in {results_dir}")
+            logger.warning(f"Clearing previously generated files in {results_dir}")
             file_paths_generated = [
                 os.path.join(results_dir, fname) for fname in RESULTS_FILES_GENERATED
             ]
@@ -463,7 +465,7 @@ def join_tum_files(tum_file_paths: List[str], save_path: str) -> None:
             with open(tum_file_path, "r") as f_tum:
                 for line in f_tum:
                     f.write(line)
-    print(f"Saved joined TUM file to: {save_path}")
+    logger.info(f"Saved joined TUM file to: {save_path}")
 
 
 def get_pyfg_file_name_in_dir(target_dir: str) -> str:
