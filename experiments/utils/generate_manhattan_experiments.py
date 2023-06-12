@@ -37,7 +37,7 @@ SWEEP_RANGE_COV = "sweep_range_cov"
 SWEEP_NUM_RANGES = "sweep_num_ranges"
 SWEEP_NUM_POSES = "sweep_num_poses"
 SWEEP_NUM_BEACONS = "sweep_num_beacons"
-SWEEP_NUM_LOOP_CLOSURES = "sweep_num_loop_closures"
+SWEEP_PCT_LOOP_CLOSURES = "sweep_pct_loop_closures"
 
 MANHATTAN_EXPERIMENTS = [
     SWEEP_NUM_ROBOTS,
@@ -45,13 +45,13 @@ MANHATTAN_EXPERIMENTS = [
     SWEEP_NUM_RANGES,
     SWEEP_NUM_POSES,
     SWEEP_NUM_BEACONS,
-    SWEEP_NUM_LOOP_CLOSURES,
+    SWEEP_PCT_LOOP_CLOSURES,
 ]
 
 EXPERIMENT_TRAILING_STR = {
     SWEEP_NUM_ROBOTS: "robots",
     SWEEP_NUM_BEACONS: "beacons",
-    SWEEP_NUM_LOOP_CLOSURES: "loopClosures",
+    SWEEP_PCT_LOOP_CLOSURES: "loopClosures",
     SWEEP_NUM_POSES: "poses",
     SWEEP_NUM_RANGES: "ranges",
     SWEEP_RANGE_COV: "rangeStddev",
@@ -82,7 +82,7 @@ class ManhattanExpParam:
             return f"{self.total_num_poses}{trailing_string}"
         elif exp_name == "sweep_num_beacons":
             return f"{self.num_beacons}{trailing_string}"
-        elif exp_name == "sweep_num_loop_closures":
+        elif exp_name == "sweep_pct_loop_closures":
             return f"{self.num_loop_closures}{trailing_string}"
         else:
             raise ValueError(f"Unknown experiment: {exp_name}")
@@ -234,7 +234,7 @@ def generate_manhattan_experiments(
             num_beacons_list = list(
                 range(min_num_beacons, max_num_beacons + step_size, step_size)
             )
-        elif experiment == "sweep_num_loop_closures":
+        elif experiment == "sweep_pct_loop_closures":
             min_fraction_loop_closures = 0.0
             max_fraction_loop_closures = 0.15
             fraction_step_size = 0.03

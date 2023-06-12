@@ -34,7 +34,7 @@ from .paths import DATA_DIR
 from .generate_manhattan_experiments import (
     SWEEP_NUM_ROBOTS,
     SWEEP_NUM_BEACONS,
-    SWEEP_NUM_LOOP_CLOSURES,
+    SWEEP_PCT_LOOP_CLOSURES,
     SWEEP_NUM_POSES,
     SWEEP_NUM_RANGES,
     SWEEP_RANGE_COV,
@@ -278,6 +278,8 @@ def make_error_plots_vs_params(
         "sweep_num_ranges": r"\textbf{\# range measurements}",
         "sweep_num_robots": r"\textbf{\# robots}",
         "sweep_range_cov": r"\textbf{$\sigma_{ij}^2$}",
+        "sweep_num_beacons": r"\textbf{\# beacons}",
+        "sweep_pct_loop_closures": r"\textbf{\% loop closures}",
     }
 
     # we want rmse and max
@@ -391,7 +393,7 @@ def _get_subexperiment_results(
         experiment_to_param_type = {
             SWEEP_NUM_ROBOTS: int,
             SWEEP_NUM_BEACONS: int,
-            SWEEP_NUM_LOOP_CLOSURES: int,
+            SWEEP_PCT_LOOP_CLOSURES: float,
             SWEEP_NUM_POSES: int,
             SWEEP_NUM_RANGES: int,
             SWEEP_RANGE_COV: float,
@@ -400,7 +402,12 @@ def _get_subexperiment_results(
         param_type = experiment_to_param_type[exp_type]
 
         # cast the value to correct type and return
-        return param_type(param_value)
+        try:
+            return param_type(param_value)
+        except ValueError:
+            raise ValueError(
+                f"Could not cast {param_value} to type {param_type} for experiment type {exp_type}"
+            )
 
     # the files that cached results are saved to
     subexp_fpath = join(subexperiment_dir, SUBEXP_FNAME)
