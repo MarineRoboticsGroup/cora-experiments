@@ -64,7 +64,7 @@ class ManhattanExpParam:
     num_beacons: int = field()
     total_num_poses: int = field()
     num_range_measurements: int = field()
-    num_loop_closures: int = field()
+    pct_loop_closures: float = field()
     range_cov: float = field()
 
     def get_experiment_param_as_string(self, exp_name: str) -> str:
@@ -83,7 +83,7 @@ class ManhattanExpParam:
         elif exp_name == "sweep_num_beacons":
             return f"{self.num_beacons}{trailing_string}"
         elif exp_name == "sweep_pct_loop_closures":
-            return f"{self.num_loop_closures}{trailing_string}"
+            return f"{self.pct_loop_closures}{trailing_string}"
         else:
             raise ValueError(f"Unknown experiment: {exp_name}")
 
@@ -95,7 +95,7 @@ def run_manhattan_simulator(exp_save_dir: str, exp_params: ManhattanExpParam) ->
     num_beacons = exp_params.num_beacons
     total_num_poses = exp_params.total_num_poses
     num_range_measurements = exp_params.num_range_measurements
-    num_loop_closures = exp_params.num_loop_closures
+    pct_loop_closures = exp_params.pct_loop_closures
     range_cov = exp_params.range_cov
 
     # set the range probability such that the expected (in probabilistic sense)
@@ -109,7 +109,7 @@ def run_manhattan_simulator(exp_save_dir: str, exp_params: ManhattanExpParam) ->
     else:
         range_prob = 0.0
 
-    loop_closure_prob = min(float(num_loop_closures) / total_num_poses, 1.0)
+    loop_closure_prob = float(pct_loop_closures)
 
     dist_stddev = math.sqrt(range_cov)
     pos_stddev = 0.05
@@ -186,9 +186,7 @@ def generate_manhattan_experiments(
         num_ranges_list = [500]
         num_poses_list = [4000]
         num_beacons_list = [2]
-        num_loop_closures_list = [
-            int(num_poses_list[0] * 0.05)
-        ]  # loop closures by % of poses
+        pct_loop_closures_list = [0.05]  # loop closures by % of poses
 
         if experiment == "default":
             logger.info("Skipping default experiment")
@@ -238,7 +236,7 @@ def generate_manhattan_experiments(
             min_fraction_loop_closures = 0.0
             max_fraction_loop_closures = 0.15
             fraction_step_size = 0.03
-            num_loop_closures_list = list(
+            pct_loop_closures_list = list(
                 np.arange(
                     min_fraction_loop_closures,
                     max_fraction_loop_closures + fraction_step_size,
@@ -255,7 +253,7 @@ def generate_manhattan_experiments(
             num_beacons_list,
             num_poses_list,
             num_ranges_list,
-            num_loop_closures_list,
+            pct_loop_closures_list,
             range_cov_list,
         ):
             (
@@ -263,7 +261,7 @@ def generate_manhattan_experiments(
                 num_beacons,
                 total_num_poses,
                 num_ranges,
-                num_loop_closures,
+                pct_loop_closures,
                 range_cov,
             ) = params
             packaged_params = ManhattanExpParam(
@@ -271,7 +269,7 @@ def generate_manhattan_experiments(
                 num_beacons=num_beacons,
                 total_num_poses=total_num_poses,
                 num_range_measurements=num_ranges,
-                num_loop_closures=num_loop_closures,
+                pct_loop_closures=pct_loop_closures,
                 range_cov=range_cov,
             )
 
@@ -293,6 +291,7 @@ def generate_manhattan_experiments(
 
             # convert the data to our matlab format
             fg = parse_pickle_file(factor_graph_file)
+
             expected_saved_matlab_fpath = join(subexp_dir, "factor_graph.mat")
             if use_cached_experiments and isfile(expected_saved_matlab_fpath):
                 logger.warning(
