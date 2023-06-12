@@ -15,6 +15,7 @@ git clone git@github.com:MarineRoboticsGroup/cora-experiments.git
 # create a conda environment from environment.yml
 cd cora-experiments
 conda env create -f environment.yml
+conda activate cora
 
 # install other dependencies
 cd ~
@@ -22,7 +23,7 @@ git clone git@github.com:MarineRoboticsGroup/cora.git # CORA (MATLAB)
 git clone git@github.com:MarineRoboticsGroup/PyFactorGraph.git # PyFactorGraph (Python) - to hold problems
 git clone git@github.com:MarineRoboticsGroup/gtsam-range-aided-slam.git # our GTSAM-based solver (Python)
 cd ~/PyFactorGraph; pip install -e . # install PyFactorGraph
-cd ~/gtsam-range-only-slam; pip install -e . # install our GTSAM solver
+cd ~/gtsam-range-aided-slam; pip install -e . # install our GTSAM solver
 
 # optional (only for Manhattan experiments)
 cd ~
