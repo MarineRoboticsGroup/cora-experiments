@@ -10,9 +10,9 @@ Most dependencies you can get via `pip install -r requirements.txt`. However, th
 cd ~
 git clone git@github.com:MarineRoboticsGroup/cora-experiments.git
 
-# install the pip dependencies
+# create a conda environment from environment.yml
 cd cora-experiments
-pip install -r requirements.txt
+conda env create -f environment.yml
 
 # install other dependencies
 cd ~
