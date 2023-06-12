@@ -75,7 +75,7 @@ class SubExperimentResults:
             sorted_ape_error_df_collection.append(self.traj_error_df_collection[idx])
             sorted_traj_collections.append(self.traj_collections[idx])
         self.param_list = sorted_params
-        self.traj_error_df_collectionj = sorted_ape_error_df_collection
+        self.traj_error_df_collection = sorted_ape_error_df_collection
         self.traj_collections = sorted_traj_collections
 
 
@@ -415,7 +415,10 @@ def _get_subexperiment_results(
             print(f"\nProcessing {exp}")
             try:
                 param = _get_param(subexperiment_type, exp)
-                ape_error_dfs, aligned_trajs = evaluate_results(exp)
+                clear_existing_files = not use_cached_results
+                ape_error_dfs, aligned_trajs = evaluate_results(
+                    exp, clear_prev_files=clear_existing_files
+                )
                 subexp_results.add_experimental_result(
                     param, ape_error_dfs, aligned_trajs
                 )
