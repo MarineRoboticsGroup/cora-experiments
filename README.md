@@ -3,7 +3,9 @@ Experiments from "Certifiably Correct Range-Aided SLAM"
 
 ## Dependencies
 
-Most dependencies you can get via `pip install -r requirements.txt`. However, there are a few repos that you will need to install manually as of now.
+We packaged a working `conda` environment which handles most of the
+dependencies. However, there are a few repos that you will need to install
+manually as of now. The below snippet should get you started.
 
 ```bash
 # clone the repo
