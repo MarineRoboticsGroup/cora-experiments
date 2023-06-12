@@ -4,9 +4,7 @@ from typing import Optional
 
 
 def run_cora(
-    cora_matlab_dirpath: str = os.path.expanduser(
-        "~/range-only-slam-mission-control/cora/MATLAB"
-    ),
+    cora_matlab_dirpath: str = os.path.expanduser("~/cora/MATLAB"),
     experiment_fpath: Optional[str] = None,
     experiment_dir: Optional[str] = None,
     show_animation: bool = True,
