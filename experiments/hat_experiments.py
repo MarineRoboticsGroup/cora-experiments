@@ -4,8 +4,8 @@ from py_factor_graph.io.pyfg_text import read_from_pyfg_text
 from os.path import join
 from evo.tools import plot
 
-from .utils.run_experiments import run_experiments, ExperimentConfigs
-from .utils.paths import DATA_DIR
+from utils.run_experiments import run_experiments, ExperimentConfigs
+from utils.paths import DATA_DIR
 
 import logging, coloredlogs
 
@@ -59,11 +59,13 @@ if __name__ == "__main__":
     marine_experiment_fpath = join(MARINE_DIR, "marine_two_robots.pyfg")
     pyfg = read_from_pyfg_text(marine_experiment_fpath)
     exp_config = ExperimentConfigs(
-        generate_problems=True,
+        run_experiments_with_added_noise=True,
+        use_cached_problems=True,
         animate_trajs=False,
         run_cora=True,
+        show_solver_animation=False,
         show_gt_cora_animation=True,
-        look_for_cached_solns=True,
+        look_for_cached_solns=False,
         perform_evaluation=True,
         desired_plot_modes=[plot.PlotMode.xy],
     )

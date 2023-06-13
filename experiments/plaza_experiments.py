@@ -1,10 +1,10 @@
 import numpy as np
 from os.path import join
 from evo.tools import plot
-from py_factor_graph.io.plaza_experiments import parse_plaza_files
+from py_factor_graph.io.pyfg_text import read_from_pyfg_text
 
-from .utils.run_experiments import run_experiments, ExperimentConfigs
-from .utils.paths import DATA_DIR
+from utils.run_experiments import run_experiments, ExperimentConfigs
+from utils.paths import DATA_DIR
 
 import logging, coloredlogs
 
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     run_noisy_experiments = False  # whether to add artificial noise to the problem and also run CORA on the noisy problems
 
     PLAZA_DIR = join(DATA_DIR, "plaza")
-    PLAZA_EXPERIMENTS = ["Plaza1", "Plaza2"]
+    PLAZA_EXPERIMENTS = ["plaza1", "plaza2"]
     PLAZA_EXPERIMENT_DIRS = [join(PLAZA_DIR, exp) for exp in PLAZA_EXPERIMENTS]
 
     for base_experiment_dir in PLAZA_EXPERIMENT_DIRS:
@@ -64,17 +64,19 @@ if __name__ == "__main__":
 
         # configure how we want to run experiments
         exp_config = ExperimentConfigs(
-            generate_problems=False,
+            run_experiments_with_added_noise=False,
+            use_cached_problems=True,
             animate_trajs=False,
             run_cora=True,
+            show_solver_animation=True,
             show_gt_cora_animation=True,
             look_for_cached_solns=True,
-            perform_evaluation=False,
+            perform_evaluation=True,
             desired_plot_modes=[plot.PlotMode.xy],
         )
 
         # parse the plaza data
-        pyfg = parse_plaza_files(base_experiment_dir)
+        pyfg = read_from_pyfg_text(join(base_experiment_dir, "factor_graph.pyfg"))
 
         # run experiments
         run_experiments(pyfg, EXPERIMENTS, exp_config)

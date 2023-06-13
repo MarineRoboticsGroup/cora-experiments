@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional
-from os.path import expanduser, join, isfile, isdir
+from os.path import join, isfile, isdir
 import os
 import pickle
 from attrs import define, field
@@ -22,7 +22,6 @@ coloredlogs.install(
     fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
     field_styles=field_styles,
 )
-
 
 from .evaluate_utils import (
     evaluate_results,
@@ -473,14 +472,3 @@ def make_manhattan_experiment_plots(
         make_box_and_whisker_error_plots(
             subexp_results, subexperiment_dir, show_plots=False
         )
-
-
-if __name__ == "__main__":
-    cora_manhattan_base_dir = expanduser("~/data/manhattan/cert")
-    exp_options = ["no_loop_closures", "100loop_closures"]
-    exp_suboptions = [
-        # "sweep_num_poses",
-        # "sweep_num_ranges",
-        # "sweep_num_robots",
-        "sweep_range_cov",
-    ]

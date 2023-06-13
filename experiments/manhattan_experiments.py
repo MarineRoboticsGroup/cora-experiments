@@ -22,10 +22,10 @@ coloredlogs.install(
 if __name__ == "__main__":
     experiments = MANHATTAN_EXPERIMENTS
     generate_manhattan_experiments(
-        MANHATTAN_DATA_DIR, experiments=experiments, use_cached_experiments=True
+        MANHATTAN_DATA_DIR, experiments=experiments, use_cached_experiments=False
     )
     solve_manhattan_problems_in_dir(
-        MANHATTAN_DATA_DIR, use_cached_results=True, show_animations=False
+        MANHATTAN_DATA_DIR, use_cached_results=False, show_animations=False
     )
     make_manhattan_experiment_plots(
         base_experiment_dir=MANHATTAN_DATA_DIR,

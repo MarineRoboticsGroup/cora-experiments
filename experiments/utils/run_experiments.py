@@ -2,17 +2,14 @@ from py_factor_graph.factor_graph import FactorGraphData
 from py_factor_graph.modifiers import add_error_to_all_odom_measures
 import numpy as np
 import os
-from os.path import join, dirname, isdir, abspath
+from os.path import join, isfile
 from attrs import define, field
 from typing import List, Dict
 import evo.tools.plot as plot
 
-# get the pyfg_to_matlab directory which is four levels up from this file
-REPO_BASE_DIR = join(dirname(dirname(dirname(dirname(abspath(__file__))))))
-assert isdir(REPO_BASE_DIR), f"REPO_BASE_DIR: {REPO_BASE_DIR} is not a directory"
-
 # insert the pyfg_to_matlab directory into the path
 import sys
+from .paths import REPO_BASE_DIR
 
 sys.path.insert(0, REPO_BASE_DIR)
 from pyfg_to_matlab.matlab_interfaces import export_fg_to_matlab_cora_format
@@ -29,10 +26,24 @@ def _generate_noisy_problem(
     base_fg: FactorGraphData,
     noise_mod: np.ndarray,
     save_dir: str,
+    use_cached_problem: bool,
     animate_trajs: bool = False,
 ):
+    noisy_problem_mat_file = join(save_dir, "factor_graph.mat")
+    noisy_pyfg_save_path = join(save_dir, "factor_graph.pickle")
+    if (
+        use_cached_problem
+        and isfile(noisy_pyfg_save_path)
+        and isfile(noisy_problem_mat_file)
+    ):
+        return
+
     trans_mod, rot_mod = noise_mod
-    noisy_fg = add_error_to_all_odom_measures(base_fg, trans_mod, rot_mod)
+    if trans_mod != 0.0 or rot_mod != 0.0:
+        noisy_fg = add_error_to_all_odom_measures(base_fg, trans_mod, rot_mod)
+    else:
+        noisy_fg = base_fg
+
     if animate_trajs:
         noisy_fg.animate_odometry(
             show_gt=True,
@@ -46,8 +57,6 @@ def _generate_noisy_problem(
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
 
-    noisy_problem_mat_file = join(save_dir, "factor_graph.mat")
-    noisy_pyfg_save_path = join(save_dir, "factor_graph.pickle")
     noisy_fg.save_to_file(noisy_pyfg_save_path)
     export_fg_to_matlab_cora_format(noisy_fg, matlab_filepath=noisy_problem_mat_file)
 
@@ -62,10 +71,12 @@ def _perform_evaluation(eval_dir: str, desired_plot_modes: list):
 
 @define
 class ExperimentConfigs:
-    generate_problems: bool = field()
+    run_experiments_with_added_noise: bool = field()
+    use_cached_problems: bool = field()
     animate_trajs: bool = field()
 
     run_cora: bool = field()
+    show_solver_animation: bool = field()
     show_gt_cora_animation: bool = field()
     look_for_cached_solns: bool = field()
 
@@ -82,11 +93,15 @@ def run_experiments(
 
     # make noisy copies of problem and save
     for exp_dir, noise_mods in experiments.items():
-        if not config.generate_problems:
+        if not config.run_experiments_with_added_noise and "modified" in exp_dir:
             continue
 
         _generate_noisy_problem(
-            base_pyfg, noise_mods, exp_dir, animate_trajs=config.animate_trajs
+            base_pyfg,
+            noise_mods,
+            exp_dir,
+            config.use_cached_problems,
+            animate_trajs=config.animate_trajs,
         )
 
     # run CORA on the problems
@@ -96,6 +111,7 @@ def run_experiments(
 
         run_cora(
             experiment_dir=exp_dir,
+            show_animation=config.show_solver_animation,
             animation_show_gt=config.show_gt_cora_animation,
             look_for_cached_solns=config.look_for_cached_solns,
         )
