@@ -377,10 +377,10 @@ def make_plots_from_error_dfs(error_dfs: TrajErrorDfs, save_dir: str):
     plt.savefig(pose_bar_path)
     plt.savefig(pose_bar_path.replace(".png", ".svg"), format="svg")
 
-    print("Saved plots to: ", save_dir)
+    logger.info("Saved plots to: ", save_dir)
     # print the file paths
     for f in [three_bar_plot_path, trans_bar_path, rot_bar_path, pose_bar_path]:
-        print(f"File: {f}")
+        logger.info(f"File: {f}")
 
 
 def make_evo_ape_plots_from_trajs(

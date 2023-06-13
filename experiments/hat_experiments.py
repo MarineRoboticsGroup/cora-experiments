@@ -65,7 +65,7 @@ if __name__ == "__main__":
         run_cora=True,
         show_solver_animation=False,
         show_gt_cora_animation=True,
-        look_for_cached_solns=False,
+        look_for_cached_solns=True,
         perform_evaluation=True,
         desired_plot_modes=[plot.PlotMode.xy],
     )

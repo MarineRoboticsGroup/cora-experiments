@@ -235,7 +235,7 @@ def make_box_and_whisker_error_plots(
         save_path = join(save_dir, f"{group.lower()}_error_box_and_whisker_plot.png")
         plt.savefig(save_path)
         plt.savefig(save_path.replace(".png", ".svg"), format="svg")
-        print(f"Saved plot to {save_path}")
+        logger.info(f"Saved plot to {save_path}")
         if show_plots:
             plt.show()
 
@@ -336,7 +336,7 @@ def make_error_plots_vs_params(
 
     plt.savefig(join(save_dir, "rotation_errors_vs_params.png"))
     plt.savefig(join(save_dir, "rotation_errors_vs_params.svg"), format="svg")
-    print(f"Saved rotation errors vs params plot to {save_dir}")
+    logger.info(f"Saved rotation errors vs params plot to {save_dir}")
     if show_plots:
         plt.show()
     plt.close()
@@ -358,7 +358,7 @@ def make_error_plots_vs_params(
     axs[1].legend()
     plt.savefig(join(save_dir, "pose_errors_vs_params.png"))
     plt.savefig(join(save_dir, "pose_errors_vs_params.svg"), format="svg")
-    print(f"Saved pose errors vs params plot to {save_dir}")
+    logger.info(f"Saved pose errors vs params plot to {save_dir}")
     if show_plots:
         plt.show()
     plt.close()
@@ -418,7 +418,7 @@ def _get_subexperiment_results(
         leaf_subdirs = get_leaf_dirs(subexperiment_dir)
         subexp_results = SubExperimentResults()
         for exp in leaf_subdirs:
-            print(f"\nProcessing {exp}")
+            logger.info(f"\nProcessing {exp}")
             try:
                 param = _get_param(subexperiment_type, exp)
                 clear_existing_files = not use_cached_results
@@ -429,7 +429,7 @@ def _get_subexperiment_results(
                     param, ape_error_dfs, aligned_trajs
                 )
             except FileNotFoundError:
-                print(f"Could not find results in {exp}, skipping...")
+                logger.warning(f"Could not find results in {exp}, skipping...")
 
         # sort the results according to the params
         subexp_results.sort_according_to_params()
