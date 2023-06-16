@@ -1,6 +1,21 @@
 import matlab.engine
 import os
 from typing import Optional
+from .evaluate_utils import check_dir_ready_for_evaluation
+
+import logging, coloredlogs
+
+logger = logging.getLogger(__name__)
+field_styles = {
+    "filename": {"color": "green"},
+    "levelname": {"bold": True, "color": "black"},
+    "name": {"color": "blue"},
+}
+coloredlogs.install(
+    level="INFO",
+    fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
+    field_styles=field_styles,
+)
 
 
 def run_cora(
@@ -29,6 +44,16 @@ def run_cora(
     assert os.path.isfile(
         experiment_fpath
     ), f"Experiment file does not exist: {experiment_fpath}"
+
+    if look_for_cached_solns and not show_animation:
+        try:
+            check_dir_ready_for_evaluation(experiment_dir)
+            logger.info(
+                f"Found cached solutions for experiment: {experiment_dir}, skipping CORA"
+            )
+            return
+        except FileNotFoundError:
+            pass
 
     # start MATLAB engine
     eng = matlab.engine.start_matlab()

@@ -59,14 +59,15 @@ if __name__ == "__main__":
     marine_experiment_fpath = join(MARINE_DIR, "marine_two_robots.pyfg")
     pyfg = read_from_pyfg_text(marine_experiment_fpath)
     exp_config = ExperimentConfigs(
-        run_experiments_with_added_noise=True,
+        run_experiments_with_added_noise=False,
         use_cached_problems=True,
         animate_trajs=False,
-        run_cora=True,
-        show_solver_animation=False,
+        run_cora=False,
+        show_solver_animation=True,
         show_gt_cora_animation=True,
         look_for_cached_solns=True,
         perform_evaluation=True,
         desired_plot_modes=[plot.PlotMode.xy],
+        overlay_river_map=True,
     )
     run_experiments(pyfg, EXPERIMENTS, exp_config)

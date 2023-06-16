@@ -162,7 +162,7 @@ def _get_cora_tum_files(results_dir: str, num_robots: int) -> List[str]:
 
 
 def evaluate_results(
-    results_dir: str, clear_prev_files: bool = False
+    results_dir: str, use_cached_results: bool = True
 ) -> Tuple[TrajErrorDfs, ResultsPoseTrajCollection]:
     """Performs evaluation of the generated results. Expects the following files
     in the results_dir:
@@ -176,7 +176,7 @@ def evaluate_results(
     """
     check_dir_ready_for_evaluation(results_dir)
     aligned_results_pickle_path = os.path.join(results_dir, ALIGNED_RESULTS_FNAME)
-    if os.path.exists(aligned_results_pickle_path) and not clear_prev_files:
+    if os.path.exists(aligned_results_pickle_path) and use_cached_results:
         logger.warning(
             f"Found cached aligned results, loading from {aligned_results_pickle_path}"
         )
@@ -190,7 +190,7 @@ def evaluate_results(
         num_robots = pyfg.num_robots
 
         # clear the previously generated files if requested
-        if clear_prev_files:
+        if not use_cached_results:
             logger.warning(f"Clearing previously generated files in {results_dir}")
             file_paths_generated = [
                 os.path.join(results_dir, fname) for fname in RESULTS_FILES_GENERATED
@@ -207,43 +207,44 @@ def evaluate_results(
         # cora tum file
         cora_tum_paths = _get_cora_tum_files(results_dir, num_robots)
         joined_cora_tum_path = os.path.join(results_dir, JOINED_CORA_TUM_NAME)
-        if not os.path.exists(joined_cora_tum_path) or clear_prev_files:
-            join_tum_files(cora_tum_paths, joined_cora_tum_path)
+        if use_cached_results and os.path.exists(joined_cora_tum_path):
+            logger.info(f"CORA file already exists at {joined_cora_tum_path}.")
         else:
-            print(f"CORA file already exists at {joined_cora_tum_path}.")
+            join_tum_files(cora_tum_paths, joined_cora_tum_path)
 
         # groundtruth tum file
         gt_tum_files = _get_gt_tum_files(results_dir, num_robots)
-        if not all([os.path.exists(f) for f in gt_tum_files]) or clear_prev_files:
-            gt_tum_files = pyfg.write_pose_gt_to_tum(results_dir)
+        if all([os.path.exists(f) for f in gt_tum_files]):
+            logger.info("Ground truth files already exist.")
         else:
-            print("Ground truth files already exist.")
+            gt_tum_files = pyfg.write_pose_gt_to_tum(results_dir)
 
         joined_gt_tum_path = os.path.join(results_dir, JOINED_GT_TUM_NAME)
-        if not os.path.exists(joined_gt_tum_path):
-            join_tum_files(gt_tum_files, joined_gt_tum_path)
+        if os.path.exists(joined_gt_tum_path):
+            logger.info(f"Ground truth file already exists at {joined_gt_tum_path}.")
         else:
-            print(f"Ground truth file already exists at {joined_gt_tum_path}.")
+            join_tum_files(gt_tum_files, joined_gt_tum_path)
 
         # gtsam + odom init tum file
         gtsam_odom_tum_files = _get_gtsam_odom_tum_files(results_dir, num_robots)
         existing_gtsam_odom_files = [os.path.exists(f) for f in gtsam_odom_tum_files]
-        if not all(existing_gtsam_odom_files) or clear_prev_files:
+        if not all(existing_gtsam_odom_files):
             print("Generating GTSAM odometry file...")
             gtsam_odom_fpath = os.path.join(results_dir, "gtsam_odom.tum")
             gtsam_odom_tum_files = write_gtsam_optimized_soln_to_tum(
                 pyfg, gtsam_odom_fpath
             )
         else:
-            print("GTSAM odometry files already exist.")
+            logger.info("GTSAM odometry files already exist.")
         joined_gtsam_odom_tum_path = os.path.join(
             results_dir, JOINED_GTSAM_ODOM_TUM_NAME
         )
-        if not os.path.exists(joined_gtsam_odom_tum_path) or clear_prev_files:
-            join_tum_files(gtsam_odom_tum_files, joined_gtsam_odom_tum_path)
+        if os.path.exists(joined_gtsam_odom_tum_path):
+            logger.info(
+                f"Joined GTSAM odometry file already exists: {joined_gtsam_odom_tum_path}"
+            )
         else:
-            # print(f"Joined GTSAM odometry file already exists: {joined_gtsam_odom_tum_path}")
-            pass
+            join_tum_files(gtsam_odom_tum_files, joined_gtsam_odom_tum_path)
 
         # get the trajectories
         gt_traj_pickle_path = os.path.join(results_dir, GT_TRAJ_PICKLE_NAME)
@@ -251,22 +252,24 @@ def evaluate_results(
         gtsam_odom_traj_pickle_path = os.path.join(
             results_dir, GTSAM_ODOM_TRAJ_PICKLE_NAME
         )
-        if os.path.exists(gt_traj_pickle_path) and not clear_prev_files:
-            print(f"Loading ground truth trajectory from {gt_traj_pickle_path}")
+        if os.path.exists(gt_traj_pickle_path):
+            logger.info(f"Loading ground truth trajectory from {gt_traj_pickle_path}")
             gt_traj = pickle.load(open(gt_traj_pickle_path, "rb"))
         else:
-            print(f"Constructing ground truth trajectory from {joined_gt_tum_path}")
+            logger.info(
+                f"Constructing ground truth trajectory from {joined_gt_tum_path}"
+            )
             gt_traj = file_interface.read_tum_trajectory_file(joined_gt_tum_path)
             pickle.dump(gt_traj, open(gt_traj_pickle_path, "wb"))
 
-        if os.path.exists(cora_traj_pickle_path) and not clear_prev_files:
-            print(f"Loading CORA trajectory from {cora_traj_pickle_path}")
+        if os.path.exists(cora_traj_pickle_path) and use_cached_results:
+            logger.info(f"Loading CORA trajectory from {cora_traj_pickle_path}")
             cora_traj = pickle.load(open(cora_traj_pickle_path, "rb"))
         else:
             cora_traj = file_interface.read_tum_trajectory_file(joined_cora_tum_path)
             pickle.dump(cora_traj, open(cora_traj_pickle_path, "wb"))
 
-        if os.path.exists(gtsam_odom_traj_pickle_path) and not clear_prev_files:
+        if os.path.exists(gtsam_odom_traj_pickle_path) and use_cached_results:
             gtsam_odom_traj = pickle.load(open(gtsam_odom_traj_pickle_path, "rb"))
         else:
             gtsam_odom_traj = file_interface.read_tum_trajectory_file(
@@ -295,6 +298,7 @@ def make_evo_traj_plots(
     results_dir: str,
     show_plots: bool = False,
     valid_plot_views: List[plot.PlotMode] = [plot.PlotMode.xy],
+    overlay_river_image: bool = False,
 ):
     """Make plots comparing the ground truth, cora, and gtsam trajectories
 
@@ -308,23 +312,77 @@ def make_evo_traj_plots(
     gtsam_odom_traj_aligned = aligned_results.gtsam_odom_traj
 
     for plot_mode in valid_plot_views:
-        fig = plt.figure(figsize=(16, 14))
+        fig = plt.figure(figsize=(14, 14))
+
+        # increase linewidth and font size
+        plt.rcParams["lines.linewidth"] = 4
+        plt.rcParams["axes.labelsize"] = 30
+        plt.rcParams["xtick.labelsize"] = 30
+        plt.rcParams["ytick.labelsize"] = 30
+        plt.rcParams["legend.fontsize"] = 20
+
+        if not overlay_river_image:
+            plt.rcParams["axes.edgecolor"] = "gray"
+
+        # some configs just for the xyz plot
+        if plot_mode == plot.PlotMode.xyz:
+            plt.rcParams["axes.labelpad"] = 20.0
+            plt.rcParams["legend.loc"] = "upper left"
+        else:
+            plt.rcParams["legend.loc"] = "best"
+
+        # set grid color to light gray https://matplotlib.org/stable/gallery/color/named_colors.html
+        plt.rcParams["grid.color"] = "gainsboro"
+
         ax = plot.prepare_axis(fig, plot_mode)
+
         for traj, name, color in zip(
             [gt_traj, cora_traj_aligned, gtsam_odom_traj_aligned],
             TRAJ_NAMES,
             TRAJ_COLORS,
         ):
             plot.traj(ax, plot_mode, traj, "-", color, name)
+
+        # set background white
+        ax.set_facecolor("white")
+
+        if overlay_river_image:
+            from .paths import DATA_DIR
+
+            river_image_path = os.path.join(DATA_DIR, "river_img.png")
+            river_image_path = os.path.join(DATA_DIR, "river_2.png")
+            river_img = plt.imread(river_image_path)
+            # trim the top 10 pixels
+            river_img = river_img[10:, :, :]
+
+            xmin = -250
+            xmax = 50
+            ymin = -110
+            ymax = 50
+
+            # show the image with no padding
+            ax.imshow(river_img, extent=[xmin, xmax, ymin, ymax], alpha=1, zorder=0)
+
+            # move the lines to the front
+            for line in ax.lines:
+                line.set_zorder(10)
+
         ax.legend()
+
         traj_plot_path = os.path.join(results_dir, f"traj_plot_{plot_mode.name}.png")
-        plt.savefig(traj_plot_path)
-        plt.savefig(traj_plot_path.replace(".png", ".svg"), format="svg")
+        plt.grid(False)
+        plt.savefig(traj_plot_path, transparent=True, dpi=fig.dpi)
+        plt.savefig(
+            traj_plot_path.replace(".png", ".svg"),
+            format="svg",
+            transparent=True,
+            dpi=fig.dpi,
+        )
         if show_plots:
             plt.show()
         else:
             plt.close(fig)
-        logger.warning(f"Saved trajectory plot to {traj_plot_path}")
+        logger.info(f"Saved trajectories to: {traj_plot_path}")
 
 
 def make_plots_from_error_dfs(error_dfs: TrajErrorDfs, save_dir: str):
@@ -332,6 +390,9 @@ def make_plots_from_error_dfs(error_dfs: TrajErrorDfs, save_dir: str):
     # CORA      0.536588  0.502224  0.477673  0.188938  0.048637  0.923781   505.023905
     # Odometry  0.969083  0.854065  0.896745  0.457924  0.045657  2.026719  1647.219439
     # GTSAM     0.911305  0.777825  0.661960  0.474831  0.050085  1.906614  1456.655153
+
+    cora_color = "blue"
+    gtsam_color = "red"
 
     df_trans = error_dfs.trans_error_df
     df_rot = error_dfs.rot_error_df
@@ -349,37 +410,81 @@ def make_plots_from_error_dfs(error_dfs: TrajErrorDfs, save_dir: str):
     df_rot.drop(stats_to_drop, axis=0, inplace=True)
     df_pose.drop(stats_to_drop, axis=0, inplace=True)
 
+    # rename "rmse" to "RMSE"
+    df_trans.rename(index={"rmse": "RMSE"}, inplace=True)
+    df_rot.rename(index={"rmse": "RMSE"}, inplace=True)
+    df_pose.rename(index={"rmse": "RMSE"}, inplace=True)
+
+    # rename "max" to "Max"
+    df_trans.rename(index={"max": "Max"}, inplace=True)
+    df_rot.rename(index={"max": "Max"}, inplace=True)
+    df_pose.rename(index={"max": "Max"}, inplace=True)
+
+    # set the color map
+    color_map = {"CORA": cora_color, "GTSAM": gtsam_color}
+
+    saved_figs = []
+
+    def _save_fig(fpath: str):
+        plt.savefig(fpath, transparent=True)
+        plt.savefig(fpath.replace(".png", ".svg"), format="svg", transparent=True)
+        saved_figs.append(fpath)
+
     # make bar plots
     default_figsize = (16, 8)
     fig, axs = plt.subplots(1, 3, figsize=default_figsize)
-    df_trans.plot.bar(ax=axs[0], ylabel="Average Translation Error (meters)")
-    df_rot.plot.bar(ax=axs[1], ylabel="Average Rotation Error (degrees)")
-    df_pose.plot.bar(ax=axs[2], ylabel="Average Pose Error")
+    df_trans.plot.bar(ax=axs[0], ylabel="Translation Error (meters)", color=color_map)
+    plt.xticks(rotation=0)
+    df_rot.plot.bar(ax=axs[1], ylabel="Rotation Error (degrees)", color=color_map)
+    plt.xticks(rotation=0)
+    df_pose.plot.bar(ax=axs[2], ylabel="Average Pose Error", color=color_map)
+    plt.xticks(rotation=0)
+    # set all grids to false
+    for ax in axs:
+        ax.grid(False)
+    fig.tight_layout()
     three_bar_plot_path = os.path.join(save_dir, "three_bar_plot.png")
-    plt.savefig(three_bar_plot_path)
-    plt.savefig(three_bar_plot_path.replace(".png", ".svg"), format="svg")
+    _save_fig(three_bar_plot_path)
+
+    # make two bar plot with translation and rotation
+    fig, axs = plt.subplots(1, 2, figsize=default_figsize)
+    df_trans.plot.bar(ax=axs[0], ylabel="Translation Error (meters)", color=color_map)
+    # add padding between the two subplots
+    fig.subplots_adjust(wspace=0.3)
+    df_rot.plot.bar(ax=axs[1], ylabel="Rotation Error (degrees)", color=color_map)
+    for ax in axs:
+        # set x ticks to be horizontal
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=0)
+    two_bar_plot_path = os.path.join(save_dir, "two_bar_plot.png")
+    _save_fig(two_bar_plot_path)
 
     # also make single plots for each set of stats (trans/rot/pose)
     df_trans.plot.bar(
-        ylabel="Average Translation Error (meters)", figsize=default_figsize
+        ylabel="Translation Error (meters)", figsize=default_figsize, color=color_map
     )
+    plt.xticks(rotation=0)
+    plt.grid(False)
     trans_bar_path = os.path.join(save_dir, "translation_error.png")
-    plt.savefig(trans_bar_path)
-    plt.savefig(trans_bar_path.replace(".png", ".svg"), format="svg")
+    _save_fig(trans_bar_path)
 
-    df_rot.plot.bar(ylabel="Average Rotation Error (degrees)", figsize=default_figsize)
+    df_rot.plot.bar(
+        ylabel="Rotation Error (degrees)", figsize=default_figsize, color=color_map
+    )
+    plt.xticks(rotation=0)
+    plt.grid(False)
     rot_bar_path = os.path.join(save_dir, "rotation_error.png")
-    plt.savefig(rot_bar_path)
-    plt.savefig(rot_bar_path.replace(".png", ".svg"), format="svg")
+    _save_fig(rot_bar_path)
 
-    df_pose.plot.bar(ylabel="Average Pose Error", figsize=default_figsize)
+    df_pose.plot.bar(
+        ylabel="Average Pose Error", figsize=default_figsize, color=color_map
+    )
+    plt.xticks(rotation=0)
+    plt.grid(False)
     pose_bar_path = os.path.join(save_dir, "pose_error.png")
-    plt.savefig(pose_bar_path)
-    plt.savefig(pose_bar_path.replace(".png", ".svg"), format="svg")
+    _save_fig(pose_bar_path)
 
-    logger.info("Saved plots to: ", save_dir)
-    # print the file paths
-    for f in [three_bar_plot_path, trans_bar_path, rot_bar_path, pose_bar_path]:
+    logger.info(f"Saved plots to: {save_dir}")
+    for f in saved_figs:
         logger.info(f"File: {f}")
 
 
@@ -526,36 +631,10 @@ def get_leaf_dirs(root_dir: str) -> List[str]:
     """
     leaf_dirs = []
     assert os.path.isdir(root_dir)
-    # print(f"root_dir: {root_dir} contains the following files: {os.listdir(root_dir)}")
     for root, dirs, files in os.walk(root_dir):
         if len(dirs) == 0:
             leaf_dirs.append(root)
     return leaf_dirs
-
-
-def dir_has_been_organized(target_dir: str) -> bool:
-    file_names = os.listdir(target_dir)
-
-    # check that we have the right number of files expected
-    num_files_expected = len(EXPECTED_FILE_ENDINGS)
-    if not len(file_names) == num_files_expected:
-        print(
-            f"The directory {target_dir} isn't fully organized. We found {len(file_names)} files but expected {num_files_expected}"
-        )
-        print(f"Files found: {file_names}")
-        return False
-
-    # check that has one file with the right file ending
-    for f_ending in EXPECTED_FILE_ENDINGS:
-        files_with_ending = [f for f in file_names if f.endswith(f_ending)]
-        num_files_with_ending = len(files_with_ending)
-        if num_files_with_ending != 1:
-            print(
-                f"The directory {target_dir} isn't fully organized. We found {files_with_ending} corresponding to the ending {f_ending}"
-            )
-            return False
-
-    return True
 
 
 def write_gtsam_optimized_soln_to_tum(fg: FactorGraphData, tum_fpath: str) -> List[str]:

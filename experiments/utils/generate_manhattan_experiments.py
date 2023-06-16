@@ -66,6 +66,7 @@ class ManhattanExpParam:
     num_range_measurements: int = field()
     pct_loop_closures: float = field()
     range_cov: float = field()
+    seed: int = field(default=42)
 
     def get_experiment_param_as_string(self, exp_name: str) -> str:
         assert exp_name in MANHATTAN_EXPERIMENTS
@@ -114,8 +115,7 @@ def run_manhattan_simulator(exp_save_dir: str, exp_params: ManhattanExpParam) ->
     dist_stddev = math.sqrt(range_cov)
     pos_stddev = 0.05
     theta_stddev = 0.0005
-    seed_cnt = 2
-    seed = (seed_cnt + 1) * 9999
+    seed = (exp_params.seed + 1) * 9999
     num_timesteps = int(total_num_poses / num_robots) - 1
     use_gt_measurements = False
 
@@ -173,8 +173,10 @@ def run_manhattan_simulator(exp_save_dir: str, exp_params: ManhattanExpParam) ->
 
 def generate_manhattan_experiments(
     base_dir: str,
+    default_use_loop_closures: bool = True,
     experiments: List[str] = MANHATTAN_EXPERIMENTS,
     use_cached_experiments: bool = False,
+    num_repeats_per_param: int = 1,
 ):
     if not isdir(base_dir):
         makedirs(base_dir)
@@ -186,16 +188,19 @@ def generate_manhattan_experiments(
         num_ranges_list = [500]
         num_poses_list = [4000]
         num_beacons_list = [2]
-        pct_loop_closures_list = [0.05]  # loop closures by % of poses
+        if default_use_loop_closures:
+            pct_loop_closures_list = [0.05]  # loop closures by % of poses
+        else:
+            pct_loop_closures_list = [0.0]
 
         if experiment == "default":
             logger.info("Skipping default experiment")
             continue
         elif experiment == "sweep_num_robots":
-            # sweep from 2 to 20 robots
+            # sweep from 1 to 20 robots
             min_num_robots = 2
             max_num_robots = 20
-            step_size = 2
+            step_size = 3
             num_robots_list = list(range(min_num_robots, max_num_robots + 1, step_size))
         elif experiment == "sweep_range_cov":
             range_stddev_lower_bound = 0.2
@@ -264,47 +269,45 @@ def generate_manhattan_experiments(
                 pct_loop_closures,
                 range_cov,
             ) = params
-            packaged_params = ManhattanExpParam(
-                num_robots=num_robots,
-                num_beacons=num_beacons,
-                total_num_poses=total_num_poses,
-                num_range_measurements=num_ranges,
-                pct_loop_closures=pct_loop_closures,
-                range_cov=range_cov,
-            )
-
-            # get the specific directory name for this sub-experiment
-            sweep_subexp_dirname = packaged_params.get_experiment_param_as_string(
-                experiment
-            )
-            subexp_dir = join(param_sweep_base_dir, sweep_subexp_dirname)
-
-            # run the simulator and save the factor graph to a pickle file
-            expected_saved_fg_fpath = join(subexp_dir, "factor_graph.pickle")
-            if use_cached_experiments and isfile(expected_saved_fg_fpath):
-                logger.warning(
-                    "Found cached manhattan experiment - not generating a new one!"
+            for trial_num in range(num_repeats_per_param):
+                packaged_params = ManhattanExpParam(
+                    num_robots=num_robots,
+                    num_beacons=num_beacons,
+                    total_num_poses=total_num_poses,
+                    num_range_measurements=num_ranges,
+                    pct_loop_closures=pct_loop_closures,
+                    range_cov=range_cov,
+                    seed=trial_num * 999,
                 )
-                factor_graph_file = expected_saved_fg_fpath
-            else:
-                factor_graph_file = run_manhattan_simulator(subexp_dir, packaged_params)
 
-            # convert the data to our matlab format
-            fg = parse_pickle_file(factor_graph_file)
-
-            expected_saved_matlab_fpath = join(subexp_dir, "factor_graph.mat")
-            if use_cached_experiments and isfile(expected_saved_matlab_fpath):
-                logger.warning(
-                    "Found cached MATLAB version of experiment - not generating a new one!"
+                # get the specific directory name for this sub-experiment (e.g., "4robots")
+                sweep_subexp_dirname = packaged_params.get_experiment_param_as_string(
+                    experiment
                 )
-            else:
-                mat_file = factor_graph_file.replace(".pickle", ".mat")
-                export_fg_to_matlab_cora_format(fg, matlab_filepath=mat_file)
-            print()
 
+                subexp_dir = join(
+                    param_sweep_base_dir, sweep_subexp_dirname, f"trial{trial_num}"
+                )
 
-if __name__ == "__main__":
-    from .paths import REPO_BASE_DIR
+                # run the simulator and save the factor graph to a pickle file
+                expected_saved_fg_fpath = join(subexp_dir, "factor_graph.pickle")
+                if use_cached_experiments and isfile(expected_saved_fg_fpath):
+                    logger.warning(f"Using cached .pickle experiment - {subexp_dir}")
+                    factor_graph_file = expected_saved_fg_fpath
+                else:
+                    factor_graph_file = run_manhattan_simulator(
+                        subexp_dir, packaged_params
+                    )
 
-    manhattan_data_dir = join(REPO_BASE_DIR, "data", "manhattan")
-    generate_manhattan_experiments(manhattan_data_dir)
+                # convert the data to our matlab format
+                fg = parse_pickle_file(factor_graph_file)
+
+                expected_saved_matlab_fpath = join(subexp_dir, "factor_graph.mat")
+                if use_cached_experiments and isfile(expected_saved_matlab_fpath):
+                    logger.warning(
+                        f"Using cached .mat version of experiment - {subexp_dir}"
+                    )
+                else:
+                    mat_file = factor_graph_file.replace(".pickle", ".mat")
+                    export_fg_to_matlab_cora_format(fg, matlab_filepath=mat_file)
+                print()

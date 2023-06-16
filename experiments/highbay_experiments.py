@@ -68,8 +68,8 @@ if __name__ == "__main__":
         show_solver_animation=True,
         show_gt_cora_animation=True,
         look_for_cached_solns=True,
-        perform_evaluation=False,
-        desired_plot_modes=[plot.PlotMode.xy],
+        perform_evaluation=True,
+        desired_plot_modes=[plot.PlotMode.xy, plot.PlotMode.xyz, plot.PlotMode.xz],
     )
 
     # parse the highbay data

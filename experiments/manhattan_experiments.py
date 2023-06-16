@@ -1,3 +1,4 @@
+from os.path import join
 from utils.generate_manhattan_experiments import (
     MANHATTAN_EXPERIMENTS,
     generate_manhattan_experiments,
@@ -21,14 +22,24 @@ coloredlogs.install(
 
 if __name__ == "__main__":
     experiments = MANHATTAN_EXPERIMENTS
-    generate_manhattan_experiments(
-        MANHATTAN_DATA_DIR, experiments=experiments, use_cached_experiments=True
-    )
-    solve_manhattan_problems_in_dir(
-        MANHATTAN_DATA_DIR, use_cached_results=True, show_animations=False
-    )
-    make_manhattan_experiment_plots(
-        base_experiment_dir=MANHATTAN_DATA_DIR,
-        subexperiment_types=experiments,
-        use_cached_results=True,
-    )
+    for use_loop_closure, loop_closure_subdir in [
+        (True, "default_with_loop_closures"),
+        (False, "default_no_loop_closures"),
+    ]:
+        exp_base_dir = join(MANHATTAN_DATA_DIR, loop_closure_subdir)
+        generate_manhattan_experiments(
+            exp_base_dir,
+            default_use_loop_closures=use_loop_closure,
+            experiments=experiments,
+            use_cached_experiments=True,
+            num_repeats_per_param=10,
+        )
+        solve_manhattan_problems_in_dir(
+            exp_base_dir, use_cached_results=True, show_animations=True
+        )
+        make_manhattan_experiment_plots(
+            base_experiment_dir=exp_base_dir,
+            subexperiment_types=experiments,
+            use_cached_sweep_results=True,
+            use_cached_subexp_results=True,
+        )

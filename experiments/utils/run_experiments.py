@@ -61,10 +61,16 @@ def _generate_noisy_problem(
     export_fg_to_matlab_cora_format(noisy_fg, matlab_filepath=noisy_problem_mat_file)
 
 
-def _perform_evaluation(eval_dir: str, desired_plot_modes: list):
+def _perform_evaluation(
+    eval_dir: str, desired_plot_modes: list, overlay_river_map=False
+):
     ape_error_dfs, aligned_trajs = evaluate_results(eval_dir)
     make_evo_traj_plots(
-        aligned_trajs, eval_dir, show_plots=True, valid_plot_views=desired_plot_modes
+        aligned_trajs,
+        eval_dir,
+        show_plots=True,
+        valid_plot_views=desired_plot_modes,
+        overlay_river_image=overlay_river_map,
     )
     make_evo_ape_plots_from_trajs(aligned_trajs, eval_dir)
 
@@ -82,6 +88,7 @@ class ExperimentConfigs:
 
     perform_evaluation: bool = field()
     desired_plot_modes: List[plot.PlotMode] = field()
+    overlay_river_map: bool = field(default=False)
 
 
 def run_experiments(
@@ -121,4 +128,6 @@ def run_experiments(
         if not config.perform_evaluation:
             continue
 
-        _perform_evaluation(exp_dir, config.desired_plot_modes)
+        _perform_evaluation(
+            exp_dir, config.desired_plot_modes, config.overlay_river_map
+        )

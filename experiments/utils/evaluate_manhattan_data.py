@@ -65,14 +65,19 @@ class SubExperimentResults:
         self,
     ):
         """Sort the error dfs according to the params"""
-        # sort the params in increasing order and sort the error dfs accordingly
-        sorted_params = sorted(self.param_list)
-        sorted_ape_error_df_collection = []
-        sorted_traj_collections = []
-        for param in sorted_params:
-            idx = self.param_list.index(param)
-            sorted_ape_error_df_collection.append(self.traj_error_df_collection[idx])
-            sorted_traj_collections.append(self.traj_collections[idx])
+        sorted_params, sorted_ape_error_df_collection, sorted_traj_collections = (
+            list(t)
+            for t in zip(
+                *sorted(
+                    zip(
+                        self.param_list,
+                        self.traj_error_df_collection,
+                        self.traj_collections,
+                    ),  # sort according to the params
+                    key=lambda x: x[0],
+                )
+            )
+        )
         self.param_list = sorted_params
         self.traj_error_df_collection = sorted_ape_error_df_collection
         self.traj_collections = sorted_traj_collections
@@ -269,6 +274,7 @@ def make_error_plots_vs_params(
         subexp_results.param_list,
         subexp_results.traj_error_df_collection,
     )
+
     gtsam_color = "red"
     cora_color = "blue"
 
@@ -279,6 +285,15 @@ def make_error_plots_vs_params(
         "sweep_range_cov": r"\textbf{$\sigma_{ij}^2$}",
         "sweep_num_beacons": r"\textbf{\# beacons}",
         "sweep_pct_loop_closures": r"\textbf{\% loop closures}",
+    }
+
+    exp_params = {
+        "sweep_num_poses": "number of poses",
+        "sweep_num_ranges": "number of range measurements",
+        "sweep_num_robots": "number of robots",
+        "sweep_range_cov": r"{$\sigma_{ij}^2$}",
+        "sweep_num_beacons": "number of beacons",
+        "sweep_pct_loop_closures": "\% loop closures",
     }
 
     # we want rmse and max
@@ -316,58 +331,161 @@ def make_error_plots_vs_params(
         gtsam_pose_rmse_errors.append(pose_error_df.loc["GTSAM", "rmse"])
         gtsam_pose_max_errors.append(pose_error_df.loc["GTSAM", "max"])
 
-    # plot rotation errors
-    fig, axs = plt.subplots(1, 2, figsize=(16, 10))
-    axs[0].plot(params, cora_rot_rmse_errors, color=cora_color, label="CORA")
-    axs[0].plot(params, gtsam_rot_rmse_errors, color=gtsam_color, label="GTSAM")
-    axs[0].set_title("Rotation RMSE")
-    axs[0].set_xlabel(exp_params[param_sweep_type])
-    axs[0].set_ylabel("Rotation Error (degrees)")
-    axs[0].legend()
+    rot_errors = (
+        cora_rot_rmse_errors,
+        cora_rot_max_errors,
+        gtsam_rot_rmse_errors,
+        gtsam_rot_max_errors,
+    )
+    trans_errors = (
+        cora_trans_rmse_errors,
+        cora_trans_max_errors,
+        gtsam_trans_rmse_errors,
+        gtsam_trans_max_errors,
+    )
+    pose_errors = (
+        cora_pose_rmse_errors,
+        cora_pose_max_errors,
+        gtsam_pose_rmse_errors,
+        gtsam_pose_max_errors,
+    )
 
-    axs[1].plot(params, cora_rot_max_errors, color=cora_color, label="CORA")
-    axs[1].plot(params, gtsam_rot_max_errors, color=gtsam_color, label="GTSAM")
-    axs[1].set_title("Rotation Max Error")
-    axs[1].set_xlabel(exp_params[param_sweep_type])
-    axs[1].set_ylabel("Rotation Error (degrees)")
-    axs[1].legend()
+    # define error type as Tuple[List[float], List[float], List[float], List[float]]
+    ErrorContainer = Tuple[List[float], List[float], List[float], List[float]]
 
-    # plt.ylabel("Rotation Error (degrees)")
+    def _line_plot_helper(
+        errors: ErrorContainer,
+        units: Optional[str],
+        title: str,
+        ylabel: str,
+        fname: str,
+        show_confidence_intervals: bool = False,
+    ):
+        cora_rmse, cora_max, gtsam_rmse, gtsam_max = errors
+        fig, axs = plt.subplots(1, 2, figsize=(16, 10))
 
-    plt.savefig(join(save_dir, "rotation_errors_vs_params.png"))
-    plt.savefig(join(save_dir, "rotation_errors_vs_params.svg"), format="svg")
-    logger.info(f"Saved rotation errors vs params plot to {save_dir}")
-    if show_plots:
-        plt.show()
-    plt.close()
+        fig.subplots_adjust(wspace=0.3)
+        plt.rcParams["lines.linewidth"] = 4
+        plt.rcParams["axes.labelsize"] = 30
+        plt.rcParams["xtick.labelsize"] = 30
+        plt.rcParams["ytick.labelsize"] = 30
+        plt.rcParams["legend.fontsize"] = 25
 
-    # plot pose errors
-    fig, axs = plt.subplots(1, 2, figsize=(16, 10))
-    axs[0].plot(params, cora_pose_rmse_errors, color=cora_color, label="CORA")
-    axs[0].plot(params, gtsam_pose_rmse_errors, color=gtsam_color, label="GTSAM")
-    axs[0].set_title("Absolute Pose RMSE")
-    axs[0].set_xlabel(exp_params[param_sweep_type])
-    axs[0].set_ylabel("Absolute Pose Error")
-    axs[0].legend()
+        if show_confidence_intervals:
+            sns.lineplot(
+                x=params,
+                y=cora_rmse,
+                color=cora_color,
+                label="CORA",
+                ax=axs[0],
+                errorbar="sd",
+                err_style="band",
+            )
+            sns.lineplot(
+                x=params,
+                y=gtsam_rmse,
+                color=gtsam_color,
+                label="GTSAM",
+                ax=axs[0],
+                errorbar="sd",
+                err_style="band",
+            )
+        else:
+            axs[0].plot(params, cora_rmse, color=cora_color, label="CORA")
+            axs[0].plot(params, gtsam_rmse, color=gtsam_color, label="GTSAM")
+        if units is not None:
+            axs[0].set_ylabel(f"{title} RMSE ({units})")
+        else:
+            axs[0].set_ylabel(f"{title} RMSE")
+        axs[0].set_xlabel(exp_params[param_sweep_type])
+        axs[0].legend()
 
-    axs[1].plot(params, cora_pose_max_errors, color=cora_color, label="CORA")
-    axs[1].plot(params, gtsam_pose_max_errors, color=gtsam_color, label="GTSAM")
-    axs[1].set_title("Absolute Pose Max Error")
-    axs[1].set_xlabel(exp_params[param_sweep_type])
-    axs[1].set_ylabel("Absolute Pose Error")
-    axs[1].legend()
-    plt.savefig(join(save_dir, "pose_errors_vs_params.png"))
-    plt.savefig(join(save_dir, "pose_errors_vs_params.svg"), format="svg")
-    logger.info(f"Saved pose errors vs params plot to {save_dir}")
-    if show_plots:
-        plt.show()
-    plt.close()
+        xmin, xmax = min(params), max(params)
+        axs[0].set_xlim(xmin, xmax)
+
+        if show_confidence_intervals:
+            sns.lineplot(
+                x=params,
+                y=cora_max,
+                color=cora_color,
+                label="CORA",
+                ax=axs[1],
+                errorbar="sd",
+                err_style="band",
+            )
+            sns.lineplot(
+                x=params,
+                y=gtsam_max,
+                color=gtsam_color,
+                label="GTSAM",
+                ax=axs[1],
+                errorbar="sd",
+                err_style="band",
+            )
+        else:
+            axs[1].plot(params, cora_max, color=cora_color, label="CORA")
+            axs[1].plot(params, gtsam_max, color=gtsam_color, label="GTSAM")
+        if units is not None:
+            axs[1].set_ylabel(f"{title} Max Error ({units})")
+        else:
+            axs[1].set_ylabel(f"{title} Max Error")
+        axs[1].set_xlabel(exp_params[param_sweep_type])
+        axs[1].set_xlim(xmin, xmax)
+        axs[1].legend()
+
+        # set both axes to have the same y limits
+        ymin0, ymax0 = axs[0].get_ylim()
+        ymin1, ymax1 = axs[1].get_ylim()
+        ymin, ymax = min(ymin0, ymin1), max(ymax0, ymax1)
+
+        for ax in axs:
+            ax.set_ylim(ymin, ymax)
+
+        # set the grid color to light gray and the facecolor to transparent
+        for ax in axs:
+            ax.grid(color="gainsboro")
+            ax.set_facecolor("w")
+
+        plt.savefig(join(save_dir, fname))
+        plt.savefig(join(save_dir, fname.replace(".png", ".svg")), format="svg")
+        logger.info(f"Saved {fname} plot to {join(save_dir, fname)}")
+        if show_plots:
+            plt.show()
+        plt.close()
+
+    _line_plot_helper(
+        rot_errors,
+        "degrees",
+        "Rotation",
+        "Rotation Error (degrees)",
+        "rotation_errors_vs_params.png",
+        show_confidence_intervals=True,
+    )
+    _line_plot_helper(
+        trans_errors,
+        "meters",
+        "Translation",
+        "Translation Error (meters)",
+        "translation_errors_vs_params.png",
+        show_confidence_intervals=True,
+    )
+    _line_plot_helper(
+        pose_errors,
+        None,
+        "Pose",
+        "Absolute Pose Error",
+        "pose_errors_vs_params.png",
+        show_confidence_intervals=True,
+    )
 
 
 def _get_subexperiment_results(
-    subexperiment_type: str, use_cached_results: bool
+    subexperiment_base_dir: str,
+    subexperiment_type: str,
+    use_cached_sweep_results: bool,
+    use_cached_subexp_results: bool,
 ) -> SubExperimentResults:
-    subexperiment_dir = join(MANHATTAN_DATA_DIR, subexperiment_type)
+    subexperiment_dir = subexperiment_base_dir
     assert isdir(subexperiment_dir), f"Couldn't find directory: {subexperiment_dir}"
 
     def _get_param(exp_type: str, dir_path: str):
@@ -376,17 +494,24 @@ def _get_subexperiment_results(
         ), f"Invalid experiment type: {exp_type}, expected something from {MANHATTAN_EXPERIMENTS}"
 
         dir_path_components = dir_path.split("/")
+        param_type_subdirs = [d for d in dir_path_components if d.startswith("sweep")]
         assert (
-            dir_path_components[-2] == exp_type
+            len(param_type_subdirs) == 1
+        ), f"Found multiple param type subdirs: {param_type_subdirs}"
+        assert (
+            param_type_subdirs[0] == exp_type
         ), f"Trying to extract param type {exp_type} from experiment directory {dir_path}"
 
         # get the part of the path we expect to hold the info
-        leaf_dirname = dir_path.split("/")[-1]
         trailing_str = EXPERIMENT_TRAILING_STR[exp_type]
-        assert leaf_dirname.endswith(
-            trailing_str
-        ), f"Path: {leaf_dirname} does not end with {trailing_str}"
-        trailing_str_idx = leaf_dirname.index(trailing_str)
+        param_subdirs = [
+            d
+            for d in dir_path_components
+            if d.endswith(trailing_str) and not d.startswith("sweep")
+        ]
+        assert len(param_subdirs) == 1, f"Found multiple param subdirs: {param_subdirs}"
+        param_relevant_subdirs = param_subdirs[0]
+        trailing_str_idx = param_relevant_subdirs.index(trailing_str)
 
         # extract the value of the param and cast to the appropriate type
         experiment_to_param_type = {
@@ -397,7 +522,7 @@ def _get_subexperiment_results(
             SWEEP_NUM_RANGES: int,
             SWEEP_RANGE_COV: float,
         }
-        param_value = leaf_dirname[:trailing_str_idx]
+        param_value = param_relevant_subdirs[:trailing_str_idx]
         param_type = experiment_to_param_type[exp_type]
 
         # cast the value to correct type and return
@@ -412,22 +537,25 @@ def _get_subexperiment_results(
     subexp_fpath = join(subexperiment_dir, SUBEXP_FNAME)
 
     # if the cached files exist and we want to use them, just load them
-    if use_cached_results and isfile(subexp_fpath):
+    if use_cached_sweep_results and isfile(subexp_fpath):
+        logger.warning(
+            f"Loading cached results for all {subexperiment_type} experiments"
+        )
         subexp_results = pickle.load(open(subexp_fpath, "rb"))
     else:
         leaf_subdirs = get_leaf_dirs(subexperiment_dir)
-        subexp_results = SubExperimentResults()
+        subexp_results = SubExperimentResults([], [], [])
         for exp in leaf_subdirs:
             logger.info(f"\nProcessing {exp}")
             try:
                 param = _get_param(subexperiment_type, exp)
-                clear_existing_files = not use_cached_results
                 ape_error_dfs, aligned_trajs = evaluate_results(
-                    exp, clear_prev_files=clear_existing_files
+                    exp, use_cached_results=use_cached_subexp_results
                 )
                 subexp_results.add_experimental_result(
                     param, ape_error_dfs, aligned_trajs
                 )
+                print()
             except FileNotFoundError:
                 logger.warning(f"Could not find results in {exp}, skipping...")
 
@@ -443,8 +571,8 @@ def _get_subexperiment_results(
 def make_manhattan_experiment_plots(
     base_experiment_dir: str = MANHATTAN_DATA_DIR,
     subexperiment_types: List[str] = MANHATTAN_EXPERIMENTS,
-    plot_save_dir: Optional[str] = None,
-    use_cached_results: bool = False,
+    use_cached_sweep_results: bool = False,
+    use_cached_subexp_results: bool = False,
 ):
     assert isdir(
         base_experiment_dir
@@ -455,20 +583,18 @@ def make_manhattan_experiment_plots(
             subexperiment_dir
         ), f"Could not find subexperiment dir: {subexperiment_dir}"
 
-        if plot_save_dir is None:
-            plot_save_dir = subexperiment_dir
-
-        logger.info(f"Saving all generated Manhattan plots to {plot_save_dir}")
-
         subexp_results = _get_subexperiment_results(
-            sub_opt, use_cached_results=use_cached_results
+            subexperiment_dir,
+            sub_opt,
+            use_cached_sweep_results=use_cached_sweep_results,
+            use_cached_subexp_results=use_cached_subexp_results,
         )
         make_error_plots_vs_params(
             subexp_results,
             sub_opt,
-            plot_save_dir,
+            subexperiment_dir,
             show_plots=False,
         )
-        make_box_and_whisker_error_plots(
-            subexp_results, subexperiment_dir, show_plots=False
-        )
+        # make_box_and_whisker_error_plots(
+        #     subexp_results, subexperiment_dir, show_plots=False
+        # )
