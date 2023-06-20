@@ -19,12 +19,14 @@ coloredlogs.install(
 
 
 def run_cora(
-    cora_matlab_dirpath: str = os.path.expanduser("~/cora/MATLAB"),
+    cora_matlab_dirpath: str = os.path.expanduser(
+        "~/range-only-slam-mission-control/cora/MATLAB"
+    ),
     experiment_fpath: Optional[str] = None,
     experiment_dir: Optional[str] = None,
     show_animation: bool = True,
     animation_show_gt: bool = True,
-    look_for_cached_solns: bool = False,
+    look_for_cached_cora_solns: bool = False,
 ):
     assert os.path.isdir(
         cora_matlab_dirpath
@@ -45,7 +47,7 @@ def run_cora(
         experiment_fpath
     ), f"Experiment file does not exist: {experiment_fpath}"
 
-    if look_for_cached_solns and not show_animation:
+    if look_for_cached_cora_solns and not show_animation:
         try:
             check_dir_ready_for_evaluation(experiment_dir)
             logger.info(
@@ -58,7 +60,6 @@ def run_cora(
     # start MATLAB engine
     eng = matlab.engine.start_matlab()
 
-    # navigate to the directory where the script is located (${HOME}/range-only-slam-mission-control/cora/MATLAB)
     cora_dir = os.path.join(cora_matlab_dirpath)
     eng.cd(cora_dir, nargout=0)
 
@@ -70,6 +71,6 @@ def run_cora(
         experiment_fpath,
         show_animation,
         animation_show_gt,
-        look_for_cached_solns,
+        look_for_cached_cora_solns,
         nargout=0,
     )

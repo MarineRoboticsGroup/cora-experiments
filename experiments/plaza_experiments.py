@@ -67,11 +67,12 @@ if __name__ == "__main__":
             run_experiments_with_added_noise=False,
             use_cached_problems=True,
             animate_trajs=False,
-            run_cora=True,
-            show_solver_animation=True,
+            run_cora=False,
+            show_solver_animation=False,
             show_gt_cora_animation=True,
-            look_for_cached_solns=True,
+            look_for_cached_cora_solns=True,
             perform_evaluation=True,
+            use_cached_trajs=True,
             desired_plot_modes=[plot.PlotMode.xy],
         )
 

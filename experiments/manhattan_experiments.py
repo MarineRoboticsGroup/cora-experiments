@@ -21,7 +21,12 @@ coloredlogs.install(
 )
 
 if __name__ == "__main__":
+    import gc  # garbage collector
+
     experiments = MANHATTAN_EXPERIMENTS
+
+    # experiments = [SWEEP_NUM_ROBOTS]
+    use_all_caches = True
     for use_loop_closure, loop_closure_subdir in [
         (True, "default_with_loop_closures"),
         (False, "default_no_loop_closures"),
@@ -31,15 +36,22 @@ if __name__ == "__main__":
             exp_base_dir,
             default_use_loop_closures=use_loop_closure,
             experiments=experiments,
-            use_cached_experiments=True,
-            num_repeats_per_param=10,
+            use_cached_experiments=True or use_all_caches,
+            num_repeats_per_param=30,
         )
-        solve_manhattan_problems_in_dir(
-            exp_base_dir, use_cached_results=True, show_animations=True
-        )
+        # garbage collect to free up memory
+        gc.collect()
+        for e in experiments:
+            problem_dir = join(exp_base_dir, e)
+            solve_manhattan_problems_in_dir(
+                problem_dir,
+                use_cached_results=True or use_all_caches,
+                show_animations=False,
+            )
+        gc.collect()
         make_manhattan_experiment_plots(
             base_experiment_dir=exp_base_dir,
             subexperiment_types=experiments,
-            use_cached_sweep_results=True,
-            use_cached_subexp_results=True,
+            use_cached_sweep_results=True or use_all_caches,
+            use_cached_subexp_results=True or use_all_caches,
         )

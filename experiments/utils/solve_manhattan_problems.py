@@ -1,8 +1,5 @@
-from .evaluate_utils import (
-    get_leaf_dirs,
-)
 from .run_cora_utils import run_cora
-from .paths import MANHATTAN_DATA_DIR
+from .paths import MANHATTAN_DATA_DIR, get_leaf_dirs
 
 
 def solve_manhattan_problems_in_dir(
@@ -16,5 +13,5 @@ def solve_manhattan_problems_in_dir(
             experiment_dir=problem_dir,
             show_animation=show_animations,
             animation_show_gt=True,
-            look_for_cached_solns=use_cached_results,
+            look_for_cached_cora_solns=use_cached_results,
         )

@@ -10,7 +10,6 @@ from .pymanopt_helpers import (
     get_ground_truth_initialization,
     get_X_from_manifold_numpy,
 )
-from py_factor_graph.io.pickle_file import parse_pickle_file
 from py_factor_graph.factor_graph import FactorGraphData
 from typing import List
 
@@ -83,25 +82,3 @@ def export_fg_to_matlab_cora_format(fg: FactorGraphData, matlab_filepath: str) -
     }
     sio.savemat(matlab_filepath, mats)
     logger.info(f"Saved data to {matlab_filepath}")
-
-
-if __name__ == "__main__":
-    fg_files = {
-        0: "/home/alan/data/manhattan/factor_graph_2robots_0.5rangeStddev_100poses_20ranges_29997seed.pickle",
-        1: "/home/alan/data/manhattan/factor_graph_2robots_0.5rangeStddev_200poses_60ranges_29997seed.pickle",
-        2: "/home/alan/data/manhattan/factor_graph_2robots_0.5rangeStddev_1000poses_300ranges_29997seed.pickle",
-        3: "/home/alan/data/manhattan/factor_graph_1robots_0.5rangeStddev_100poses_0ranges_29997seed.pickle",  # odom only
-        4: "/home/alan/data/hat_data/16OCT2022/factor_graph.pickle",
-        5: "/home/alan/data/manhattan/factor_graph_4robots_0.5rangeStddev_100poses_0ranges_25loopClosures_29997seed.pickle",  # no ranges, with loop closures
-        6: "/home/alan/data/manhattan/factor_graph_4robots_0.5rangeStddev_10000poses_0ranges_100loopClosures_29997seed.pickle",  # no ranges, many poses, some loop closures
-    }
-    fg_files = {0: "/home/alan/data/highbay_single_drone/pyfg.pickle"}
-    for pyfg_file in fg_files.values():
-        data_filepath = pyfg_file.replace(".pickle", ".mat")
-        fg = parse_pickle_file(pyfg_file)
-        if "hat_data" in pyfg_file:
-            pass
-            # fg = make_beacons_into_robot_trajectory(fg)
-
-        fg.print_summary()
-        export_fg_to_matlab_cora_format(fg, data_filepath)

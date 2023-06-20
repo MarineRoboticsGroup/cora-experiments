@@ -15,7 +15,7 @@ sys.path.insert(0, REPO_BASE_DIR)
 from pyfg_to_matlab.matlab_interfaces import export_fg_to_matlab_cora_format
 
 from .evaluate_utils import (
-    evaluate_results,
+    get_aligned_traj_results_in_dir,
     make_evo_ape_plots_from_trajs,
     make_evo_traj_plots,
 )
@@ -62,17 +62,22 @@ def _generate_noisy_problem(
 
 
 def _perform_evaluation(
-    eval_dir: str, desired_plot_modes: list, overlay_river_map=False
+    eval_dir: str,
+    desired_plot_modes: list,
+    use_cached_trajs: bool,
+    overlay_river_map=False,
 ):
-    ape_error_dfs, aligned_trajs = evaluate_results(eval_dir)
+    aligned_trajs = get_aligned_traj_results_in_dir(
+        eval_dir, use_cached_results=use_cached_trajs
+    )
     make_evo_traj_plots(
         aligned_trajs,
         eval_dir,
-        show_plots=True,
+        show_plots=False,
         valid_plot_views=desired_plot_modes,
         overlay_river_image=overlay_river_map,
     )
-    make_evo_ape_plots_from_trajs(aligned_trajs, eval_dir)
+    make_evo_ape_plots_from_trajs(aligned_trajs, eval_dir, show_plots=False)
 
 
 @define
@@ -84,9 +89,10 @@ class ExperimentConfigs:
     run_cora: bool = field()
     show_solver_animation: bool = field()
     show_gt_cora_animation: bool = field()
-    look_for_cached_solns: bool = field()
+    look_for_cached_cora_solns: bool = field()
 
     perform_evaluation: bool = field()
+    use_cached_trajs: bool = field()
     desired_plot_modes: List[plot.PlotMode] = field()
     overlay_river_map: bool = field(default=False)
 
@@ -120,7 +126,7 @@ def run_experiments(
             experiment_dir=exp_dir,
             show_animation=config.show_solver_animation,
             animation_show_gt=config.show_gt_cora_animation,
-            look_for_cached_solns=config.look_for_cached_solns,
+            look_for_cached_cora_solns=config.look_for_cached_cora_solns,
         )
 
     # evaluate results
@@ -129,5 +135,8 @@ def run_experiments(
             continue
 
         _perform_evaluation(
-            exp_dir, config.desired_plot_modes, config.overlay_river_map
+            exp_dir,
+            config.desired_plot_modes,
+            use_cached_trajs=config.use_cached_trajs,
+            overlay_river_map=config.overlay_river_map,
         )

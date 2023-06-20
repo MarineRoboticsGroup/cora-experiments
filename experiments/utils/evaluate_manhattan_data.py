@@ -24,12 +24,12 @@ coloredlogs.install(
 )
 
 from .evaluate_utils import (
-    evaluate_results,
-    get_leaf_dirs,
+    get_aligned_traj_results_in_dir,
+    get_ape_error_stats_from_aligned_trajs,
     TrajErrorDfs,
     ResultsPoseTrajCollection,
 )
-from .paths import DATA_DIR
+from .paths import DATA_DIR, get_leaf_dirs
 from .generate_manhattan_experiments import (
     SWEEP_NUM_ROBOTS,
     SWEEP_NUM_BEACONS,
@@ -545,19 +545,31 @@ def _get_subexperiment_results(
     else:
         leaf_subdirs = get_leaf_dirs(subexperiment_dir)
         subexp_results = SubExperimentResults([], [], [])
-        for exp in leaf_subdirs:
-            logger.info(f"\nProcessing {exp}")
+        from time import perf_counter
+
+        for exp_dirpath in leaf_subdirs:
+            single_subexp_start = perf_counter()
+            logger.info(f"\nProcessing {exp_dirpath}")
             try:
-                param = _get_param(subexperiment_type, exp)
-                ape_error_dfs, aligned_trajs = evaluate_results(
-                    exp, use_cached_results=use_cached_subexp_results
+                param = _get_param(subexperiment_type, exp_dirpath)
+                aligned_trajs = get_aligned_traj_results_in_dir(
+                    exp_dirpath, use_cached_results=use_cached_subexp_results
+                )
+                ape_error_dfs = get_ape_error_stats_from_aligned_trajs(
+                    aligned_trajs, exp_dirpath, use_cached_subexp_results
                 )
                 subexp_results.add_experimental_result(
                     param, ape_error_dfs, aligned_trajs
                 )
                 print()
-            except FileNotFoundError:
-                logger.warning(f"Could not find results in {exp}, skipping...")
+            except FileNotFoundError as e:
+                logger.error(f"Could not find reslts in {exp_dirpath}: {e}")
+                raise e
+
+            single_subexp_end = perf_counter()
+            logger.info(
+                f"Processed {exp_dirpath} in {single_subexp_end - single_subexp_start:.2f} seconds"
+            )
 
         # sort the results according to the params
         subexp_results.sort_according_to_params()
@@ -566,6 +578,9 @@ def _get_subexperiment_results(
         pickle.dump(subexp_results, open(subexp_fpath, "wb"))
 
     return subexp_results
+
+
+import gc
 
 
 def make_manhattan_experiment_plots(
@@ -598,3 +613,4 @@ def make_manhattan_experiment_plots(
         # make_box_and_whisker_error_plots(
         #     subexp_results, subexperiment_dir, show_plots=False
         # )
+        gc.collect()
