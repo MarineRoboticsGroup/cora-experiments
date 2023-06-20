@@ -25,14 +25,14 @@ if __name__ == "__main__":
     run_noisy_experiments = False  # whether to add artificial noise to the problem and also run CORA on the noisy problems
 
     # the data directory is two levels up from this file
-    HIGHBAY_DIR = join(DATA_DIR, "hexcopter_highbay")
+    SINGLE_DRONE_DIR = join(DATA_DIR, "single_drone")
 
     BASE_EXPERIMENT = {
-        HIGHBAY_DIR: np.array([0.0, 0.0]),
+        SINGLE_DRONE_DIR: np.array([0.0, 0.0]),
     }
 
     if run_noisy_experiments:
-        modified_dir = join(HIGHBAY_DIR, "modified")
+        modified_dir = join(SINGLE_DRONE_DIR, "modified")
 
         # make noisy version of problem
         trans_stddev = 0.01
@@ -65,15 +65,16 @@ if __name__ == "__main__":
         use_cached_problems=True,
         animate_trajs=False,
         run_cora=True,
-        show_solver_animation=True,
+        show_solver_animation=False,
         show_gt_cora_animation=True,
-        look_for_cached_solns=True,
+        look_for_cached_cora_solns=True,
         perform_evaluation=True,
+        use_cached_trajs=True,
         desired_plot_modes=[plot.PlotMode.xy, plot.PlotMode.xyz, plot.PlotMode.xz],
     )
 
-    # parse the highbay data
-    experiment_file = join(HIGHBAY_DIR, "hexcopter_highbay.pyfg")
+    # parse the single_drone data
+    experiment_file = join(SINGLE_DRONE_DIR, "single_drone.pyfg")
     pyfg = read_from_pyfg_text(experiment_file)
 
     # run experiments
