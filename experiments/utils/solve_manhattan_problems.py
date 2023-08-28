@@ -14,4 +14,6 @@ def solve_manhattan_problems_in_dir(
             show_animation=show_animations,
             animation_show_gt=True,
             look_for_cached_cora_solns=use_cached_results,
+            solve_marginalized_problem=False,
+            save_iterates_info=False,
         )

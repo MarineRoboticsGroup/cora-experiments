@@ -1,83 +1,56 @@
-import numpy as np
 from os.path import join
 from evo.tools import plot
-from py_factor_graph.io.pyfg_text import read_from_pyfg_text
+from py_factor_graph.io.plaza_experiments import parse_plaza_files
+from py_factor_graph.modifiers import skip_first_n_poses
 
-from utils.run_experiments import run_experiments, ExperimentConfigs
+from utils.run_experiments import (
+    run_experiments,
+    ExperimentConfigs,
+    get_all_experiments_to_run,
+)
 from utils.paths import DATA_DIR
 
-import logging, coloredlogs
-
-logger = logging.getLogger(__name__)
-field_styles = {
-    "filename": {"color": "green"},
-    "levelname": {"bold": True, "color": "black"},
-    "name": {"color": "blue"},
-}
-coloredlogs.install(
-    level="INFO",
-    fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
-    field_styles=field_styles,
-)
-
-
 if __name__ == "__main__":
-    run_noisy_experiments = False  # whether to add artificial noise to the problem and also run CORA on the noisy problems
+    exp_config = ExperimentConfigs(
+        run_experiments_with_added_noise=True,
+        use_cached_problems=False,
+        animate_trajs=True,
+        run_cora=True,
+        solve_marginalized_problem=False,
+        show_solver_animation=False,
+        show_gt_cora_animation=True,
+        look_for_cached_cora_solns=True,
+        perform_evaluation=True,
+        use_cached_trajs=False,
+        desired_plot_modes=[plot.PlotMode.xy],
+    )
+
+    PLAZA_ORIGINAL_DATA_DIRS = {
+        "plaza1": "/home/alan/experimental_data/plaza/Plaza1",
+        "plaza2": "/home/alan/experimental_data/plaza/Plaza2",
+    }
 
     PLAZA_DIR = join(DATA_DIR, "plaza")
-    PLAZA_EXPERIMENTS = ["plaza1", "plaza2"]
+    # PLAZA_EXPERIMENTS = ["plaza1", "plaza2"]
+    # PLAZA_EXPERIMENTS = ["plaza1"]
+    PLAZA_EXPERIMENTS = ["plaza2"]
     PLAZA_EXPERIMENT_DIRS = [join(PLAZA_DIR, exp) for exp in PLAZA_EXPERIMENTS]
 
     for base_experiment_dir in PLAZA_EXPERIMENT_DIRS:
-        BASE_EXPERIMENT = {
-            base_experiment_dir: np.array([0.0, 0.0]),
-        }
-
-        if run_noisy_experiments:
-            # make noisy version of problem
-            trans_stddev = 0.01
-            rot_stddev = 0.005
-
-            MODS = {
-                "trans_only": np.array([trans_stddev, 0.0]),
-                "rot_only": np.array([0.0, rot_stddev]),
-                "trans_and_rot": np.array([trans_stddev, rot_stddev]),
-            }
-            modified_dir = join(base_experiment_dir, "modified")
-            NOISY_EXPERIMENTS = {
-                join(modified_dir, mod_type, "noisy_problem"): mod_vals
-                for mod_type, mod_vals in MODS.items()
-            }
-            NOISIER_EXPERIMENTS = {
-                join(modified_dir, mod_type, "noisier_problem"): 2 * mod_vals
-                for mod_type, mod_vals in MODS.items()
-            }
-
-            # join all experiments
-            EXPERIMENTS = {
-                **BASE_EXPERIMENT,
-                **NOISY_EXPERIMENTS,
-                **NOISIER_EXPERIMENTS,
-            }
+        if "plaza1" in base_experiment_dir:
+            orig_data_dir = PLAZA_ORIGINAL_DATA_DIRS["plaza1"]
+        elif "plaza2" in base_experiment_dir:
+            orig_data_dir = PLAZA_ORIGINAL_DATA_DIRS["plaza2"]
         else:
-            EXPERIMENTS = BASE_EXPERIMENT
+            raise ValueError(f"Unknown experiment dir: {base_experiment_dir}")
 
         # configure how we want to run experiments
-        exp_config = ExperimentConfigs(
-            run_experiments_with_added_noise=False,
-            use_cached_problems=True,
-            animate_trajs=False,
-            run_cora=False,
-            show_solver_animation=False,
-            show_gt_cora_animation=True,
-            look_for_cached_cora_solns=True,
-            perform_evaluation=True,
-            use_cached_trajs=True,
-            desired_plot_modes=[plot.PlotMode.xy],
-        )
-
         # parse the plaza data
-        pyfg = read_from_pyfg_text(join(base_experiment_dir, "factor_graph.pyfg"))
+        pyfg = parse_plaza_files(orig_data_dir)
+        if "plaza2" in base_experiment_dir:
+            # GT data is a little spurious for first 225 poses
+            pyfg = skip_first_n_poses(pyfg, 225)
 
-        # run experiments
-        run_experiments(pyfg, EXPERIMENTS, exp_config)
+        # get all the experiments to run and run them
+        experiments = get_all_experiments_to_run(base_experiment_dir, exp_config)
+        run_experiments(pyfg, experiments, exp_config)

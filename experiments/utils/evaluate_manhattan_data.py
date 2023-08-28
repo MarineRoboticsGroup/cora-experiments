@@ -1,27 +1,14 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 from os.path import join, isfile, isdir
 import os
 import pickle
-from attrs import define, field
+from attrs import define, field, validators
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 plt.rcParams["text.usetex"] = True
 import seaborn as sns
 import pandas as pd
-
-import logging, coloredlogs
-
-logger = logging.getLogger(__name__)
-field_styles = {
-    "filename": {"color": "green"},
-    "levelname": {"bold": True, "color": "black"},
-    "name": {"color": "blue"},
-}
-coloredlogs.install(
-    level="INFO",
-    fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
-    field_styles=field_styles,
-)
 
 from .evaluate_utils import (
     get_aligned_traj_results_in_dir,
@@ -40,13 +27,60 @@ from .generate_manhattan_experiments import (
     MANHATTAN_EXPERIMENTS,
     EXPERIMENT_TRAILING_STR,
 )
+from .logging_utils import logger
 
 MANHATTAN_DATA_DIR = join(DATA_DIR, "manhattan")
 SUBEXP_FNAME = "subexperiment_results.pickle"
 
 
+def get_param_from_dirpath(exp_type: str, dir_path: str):
+    assert (
+        exp_type in MANHATTAN_EXPERIMENTS
+    ), f"Invalid experiment type: {exp_type}, expected something from {MANHATTAN_EXPERIMENTS}"
+
+    dir_path_components = dir_path.split("/")
+    param_type_subdirs = [d for d in dir_path_components if d.startswith("sweep")]
+    assert (
+        len(param_type_subdirs) == 1
+    ), f"Found multiple param type subdirs: {param_type_subdirs}"
+    assert (
+        param_type_subdirs[0] == exp_type
+    ), f"Trying to extract param type {exp_type} from experiment directory {dir_path}"
+
+    # get the part of the path we expect to hold the info
+    trailing_str = EXPERIMENT_TRAILING_STR[exp_type]
+    param_subdirs = [
+        d
+        for d in dir_path_components
+        if d.endswith(trailing_str) and not d.startswith("sweep")
+    ]
+    assert len(param_subdirs) == 1, f"Found multiple param subdirs: {param_subdirs}"
+    param_relevant_subdirs = param_subdirs[0]
+    trailing_str_idx = param_relevant_subdirs.index(trailing_str)
+
+    # extract the value of the param and cast to the appropriate type
+    experiment_to_param_type = {
+        SWEEP_NUM_ROBOTS: int,
+        SWEEP_NUM_BEACONS: int,
+        SWEEP_PCT_LOOP_CLOSURES: float,
+        SWEEP_NUM_POSES: int,
+        SWEEP_NUM_RANGES: int,
+        SWEEP_RANGE_COV: float,
+    }
+    param_value = param_relevant_subdirs[:trailing_str_idx]
+    param_type = experiment_to_param_type[exp_type]
+
+    # cast the value to correct type and return
+    try:
+        return param_type(param_value)
+    except ValueError:
+        raise ValueError(
+            f"Could not cast {param_value} to type {param_type} for experiment type {exp_type}"
+        )
+
+
 @define
-class SubExperimentResults:
+class SubExperimentTrajResults:
     param_list: List = field(default=[])
     traj_error_df_collection: List[TrajErrorDfs] = field(default=[])
     traj_collections: List[ResultsPoseTrajCollection] = field(default=[])
@@ -83,8 +117,8 @@ class SubExperimentResults:
         self.traj_collections = sorted_traj_collections
 
 
-def make_box_and_whisker_error_plots(
-    subexp_results: SubExperimentResults,
+def _make_box_and_whisker_error_plots(
+    subexp_results: SubExperimentTrajResults,
     save_dir: str,
     show_plots: bool = False,
 ):
@@ -249,8 +283,8 @@ def make_box_and_whisker_error_plots(
     # plt.show()
 
 
-def make_error_plots_vs_params(
-    subexp_results: SubExperimentResults,
+def _make_error_plots_vs_params(
+    subexp_results: SubExperimentTrajResults,
     param_sweep_type: str,
     save_dir: str,
     show_plots: bool = False,
@@ -479,59 +513,14 @@ def make_error_plots_vs_params(
     )
 
 
-def _get_subexperiment_results(
+def _get_subexperiment_traj_results(
     subexperiment_base_dir: str,
     subexperiment_type: str,
     use_cached_sweep_results: bool,
     use_cached_subexp_results: bool,
-) -> SubExperimentResults:
+) -> SubExperimentTrajResults:
     subexperiment_dir = subexperiment_base_dir
     assert isdir(subexperiment_dir), f"Couldn't find directory: {subexperiment_dir}"
-
-    def _get_param(exp_type: str, dir_path: str):
-        assert (
-            exp_type in MANHATTAN_EXPERIMENTS
-        ), f"Invalid experiment type: {exp_type}, expected something from {MANHATTAN_EXPERIMENTS}"
-
-        dir_path_components = dir_path.split("/")
-        param_type_subdirs = [d for d in dir_path_components if d.startswith("sweep")]
-        assert (
-            len(param_type_subdirs) == 1
-        ), f"Found multiple param type subdirs: {param_type_subdirs}"
-        assert (
-            param_type_subdirs[0] == exp_type
-        ), f"Trying to extract param type {exp_type} from experiment directory {dir_path}"
-
-        # get the part of the path we expect to hold the info
-        trailing_str = EXPERIMENT_TRAILING_STR[exp_type]
-        param_subdirs = [
-            d
-            for d in dir_path_components
-            if d.endswith(trailing_str) and not d.startswith("sweep")
-        ]
-        assert len(param_subdirs) == 1, f"Found multiple param subdirs: {param_subdirs}"
-        param_relevant_subdirs = param_subdirs[0]
-        trailing_str_idx = param_relevant_subdirs.index(trailing_str)
-
-        # extract the value of the param and cast to the appropriate type
-        experiment_to_param_type = {
-            SWEEP_NUM_ROBOTS: int,
-            SWEEP_NUM_BEACONS: int,
-            SWEEP_PCT_LOOP_CLOSURES: float,
-            SWEEP_NUM_POSES: int,
-            SWEEP_NUM_RANGES: int,
-            SWEEP_RANGE_COV: float,
-        }
-        param_value = param_relevant_subdirs[:trailing_str_idx]
-        param_type = experiment_to_param_type[exp_type]
-
-        # cast the value to correct type and return
-        try:
-            return param_type(param_value)
-        except ValueError:
-            raise ValueError(
-                f"Could not cast {param_value} to type {param_type} for experiment type {exp_type}"
-            )
 
     # the files that cached results are saved to
     subexp_fpath = join(subexperiment_dir, SUBEXP_FNAME)
@@ -544,14 +533,14 @@ def _get_subexperiment_results(
         subexp_results = pickle.load(open(subexp_fpath, "rb"))
     else:
         leaf_subdirs = get_leaf_dirs(subexperiment_dir)
-        subexp_results = SubExperimentResults([], [], [])
+        subexp_results = SubExperimentTrajResults([], [], [])
         from time import perf_counter
 
         for exp_dirpath in leaf_subdirs:
             single_subexp_start = perf_counter()
             logger.info(f"\nProcessing {exp_dirpath}")
             try:
-                param = _get_param(subexperiment_type, exp_dirpath)
+                param = get_param_from_dirpath(subexperiment_type, exp_dirpath)
                 aligned_trajs = get_aligned_traj_results_in_dir(
                     exp_dirpath, use_cached_results=use_cached_subexp_results
                 )
@@ -580,10 +569,7 @@ def _get_subexperiment_results(
     return subexp_results
 
 
-import gc
-
-
-def make_manhattan_experiment_plots(
+def make_manhattan_rmse_plots(
     base_experiment_dir: str = MANHATTAN_DATA_DIR,
     subexperiment_types: List[str] = MANHATTAN_EXPERIMENTS,
     use_cached_sweep_results: bool = False,
@@ -598,19 +584,268 @@ def make_manhattan_experiment_plots(
             subexperiment_dir
         ), f"Could not find subexperiment dir: {subexperiment_dir}"
 
-        subexp_results = _get_subexperiment_results(
+        subexp_results = _get_subexperiment_traj_results(
             subexperiment_dir,
             sub_opt,
             use_cached_sweep_results=use_cached_sweep_results,
             use_cached_subexp_results=use_cached_subexp_results,
         )
-        make_error_plots_vs_params(
+        _make_error_plots_vs_params(
             subexp_results,
             sub_opt,
             subexperiment_dir,
             show_plots=False,
         )
-        # make_box_and_whisker_error_plots(
-        #     subexp_results, subexperiment_dir, show_plots=False
+        _make_box_and_whisker_error_plots(
+            subexp_results, subexperiment_dir, show_plots=False
+        )
+
+
+def get_subopt_results_in_dir(exp_dir: str) -> Tuple[float, float]:
+    results_fpath = join(exp_dir, "factor_graph_results.mat")
+    if not isfile(results_fpath):
+        raise FileNotFoundError(f"Could not find results file: {results_fpath}")
+
+    results = loadmat(results_fpath)
+    certified_lower_bound = results["results"]["certified_lower_bound"][0][0].item()
+    final_cost = results["results"]["final_soln_cost"][0][0].item()
+    return certified_lower_bound, final_cost
+
+
+SUBOPT_GAP_LABEL = "Optimality Gap (\%)"
+FINAL_COST_LABEL = "Final Cost"
+LOWER_BOUND_LABEL = "Certified Lower Bound"
+
+
+@define
+class SubExperimentSuboptResults:
+    with_loop_closures: bool = field(validator=validators.instance_of(bool))
+    param_sweep_type: str = field(
+        validator=[validators.instance_of(str), validators.in_(MANHATTAN_EXPERIMENTS)]
+    )
+    param_list: List = field(default=[])
+    certified_lower_bounds: List[float] = field(default=[])
+    final_costs: List[float] = field(default=[])
+
+    @property
+    def suboptimality_gaps(self) -> List[float]:
+        gaps = [
+            final_cost - certified_lower_bound
+            for final_cost, certified_lower_bound in zip(
+                self.final_costs, self.certified_lower_bounds
+            )
+        ]
+
+        # smallest allowed gap is 0
+        gaps = [max(0, gap) for gap in gaps]
+        return gaps
+
+    def add_experimental_result(
+        self, param: Any, certified_lower_bound: float, final_cost: float
+    ):
+        self.param_list.append(param)
+        self.certified_lower_bounds.append(certified_lower_bound)
+        self.final_costs.append(final_cost)
+
+    def num_experiments(self) -> int:
+        return len(self.param_list)
+
+    def results_to_df(self) -> pd.DataFrame:
+        df = pd.DataFrame(
+            {
+                LOWER_BOUND_LABEL: self.certified_lower_bounds,
+                FINAL_COST_LABEL: self.final_costs,
+                SUBOPT_GAP_LABEL: self.suboptimality_gaps,
+            },
+            index=self.param_list,
+        )
+        df.index.name = self.param_sweep_type
+        return df
+
+
+from .generate_manhattan_experiments import (
+    USE_LOOP_CLOSURE,
+    NO_LOOP_CLOSURE,
+    LOOP_CLOSURE_OPTIONS,
+    EXPERIMENT_PLOT_TITLES,
+)
+from scipy.io import loadmat
+
+
+LOOP_CLOSURE_TITLES = {
+    USE_LOOP_CLOSURE: "With Loop Closures",
+    NO_LOOP_CLOSURE: "No Loop Closures",
+}
+
+
+def _plot_subopt_results(
+    subopt_results: SubExperimentSuboptResults,
+    loop_closure_status: str,
+    subexperiment_type: str,
+    ax: Optional[plt.Axes] = None,
+):
+    print(
+        f"Plotting {subexperiment_type} results with loop closures: {loop_closure_status}"
+    )
+    results_df = subopt_results.results_to_df()
+
+    # Set the style of seaborn for better visualization
+    sns.set(style="whitegrid")
+
+    # Create the box-and-whisker plot
+    using_outside_ax = ax is not None
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+    # y label is suboptimality gap (percentage)
+    # sns.boxplot(x=results_df.index, y=SUBOPT_GAP_LABEL, data=results_df)
+
+    # plot as line plot with shading of confidence interval
+    sns.lineplot(
+        x=results_df.index,
+        y=SUBOPT_GAP_LABEL,
+        data=results_df,
+        ax=ax,
+    )
+
+    # xticks should be all integers
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+    # if we are doing "Number of Ranges", lets rotate the xticks
+    # if subexperiment_type == "sweep_num_ranges":
+    #     ax.xaxis.set_tick_params(rotation=45)
+
+    # increase fontsize for x and y ticks
+    ax.tick_params(axis="both", which="major", labelsize=18)
+
+    # set the xlimits tight to the data
+    xmin, xmax = min(results_df.index), max(results_df.index)
+    ax.set_xlim(xmin, xmax)
+
+    # Set title and labels for the plot
+    if using_outside_ax:
+        plt.xlabel("")
+        plt.ylabel("")
+    else:
+        x_label = EXPERIMENT_PLOT_TITLES[subexperiment_type]
+        # plt.title(
+        #     f"Suboptimality Gap vs. {x_label} ({LOOP_CLOSURE_TITLES[loop_closure_status]})"
         # )
-        gc.collect()
+        plt.xlabel(x_label)
+        plt.ylim(0, 7)
+
+        plt.tight_layout()
+        plt.show()
+
+
+def make_manhattan_subopt_plots(
+    base_experiment_dir: str = MANHATTAN_DATA_DIR,
+    loop_closure_options: List[str] = LOOP_CLOSURE_OPTIONS,
+    subexperiment_types: List[str] = MANHATTAN_EXPERIMENTS,
+):
+    assert isdir(
+        base_experiment_dir
+    ), f"Base experimental Manhattan dir not found: {base_experiment_dir}"
+
+    fig, axes = plt.subplots(2, 3, figsize=(24, 12))
+    from itertools import product
+
+    axes_row_idxs = [0, 1]
+    axes_col_idxs = [0, 1, 2]
+    axes_idxs = list(product(axes_row_idxs, axes_col_idxs))
+    axes_cnt = 0
+    for loop_closure_option in loop_closure_options:
+        assert loop_closure_option in LOOP_CLOSURE_OPTIONS
+        has_loop_closures = loop_closure_option == USE_LOOP_CLOSURE
+
+        for sub_exp in subexperiment_types:
+            subexperiment_dir = join(base_experiment_dir, loop_closure_option, sub_exp)
+            assert isdir(
+                subexperiment_dir
+            ), f"Could not find parameter sweep dir: {subexperiment_dir}"
+
+            leaf_subdirs = get_leaf_dirs(subexperiment_dir)
+            subexp_results = SubExperimentSuboptResults(
+                has_loop_closures, sub_exp, [], [], []
+            )
+
+            for exp_dirpath in leaf_subdirs:
+                try:
+                    param = get_param_from_dirpath(sub_exp, exp_dirpath)
+                    certified_lower_bound, final_cost = get_subopt_results_in_dir(
+                        exp_dirpath
+                    )
+                    opt_gap = final_cost - certified_lower_bound
+                    opt_gap_epsilon = 5e-1
+                    if opt_gap <= -opt_gap_epsilon:
+                        msg = f"Optimality gap should be non-negative: {opt_gap}, final cost: {final_cost}, lb: {certified_lower_bound}"
+                        raise ValueError(msg)
+                    subexp_results.add_experimental_result(
+                        param, certified_lower_bound, final_cost
+                    )
+                except FileNotFoundError as e:
+                    logger.info(f"Could not find results in {exp_dirpath}: {e}")
+                    # raise e
+                except ValueError as e:
+                    logger.info(e)
+
+            if subexp_results.num_experiments() == 0:
+                raise ValueError(
+                    f"No experiments found for {loop_closure_option} {sub_exp}"
+                )
+            ax_idx = axes_idxs[axes_cnt]
+            print(f"Plotting {loop_closure_option} {sub_exp} on {ax_idx}")
+            _plot_subopt_results(
+                subexp_results, loop_closure_option, sub_exp, ax=axes[ax_idx]
+            )
+            axes_cnt += 1
+
+            ax_row, ax_col = ax_idx
+            if ax_row == 1:
+                axes[ax_idx].set_xlabel(
+                    EXPERIMENT_PLOT_TITLES[sub_exp], fontsize=26, labelpad=20
+                )
+            else:
+                axes[ax_idx].set_xlabel("")
+            if ax_col == 0:
+                # space the y label out a bit
+                axes[ax_idx].set_ylabel(SUBOPT_GAP_LABEL, fontsize=20, labelpad=20)
+            else:
+                axes[ax_idx].set_ylabel("")
+
+    # set the heights constant within each row
+    for row_idx in axes_row_idxs:
+        max_ylim_in_row = max(
+            [axes[(row_idx, col_idx)].get_ylim()[1] for col_idx in axes_col_idxs]
+        )
+        for col_idx in axes_col_idxs:
+            axes[(row_idx, col_idx)].set_ylim(0, max_ylim_in_row)
+
+    # set the background to white and the grid to light gray
+    for ax in axes.flatten():
+        ax.set_facecolor("w")
+        ax.grid(color="gainsboro")
+
+        # add lines on the bottom and left of the plot
+        ax.spines["bottom"].set_color("black")
+        ax.spines["left"].set_color("black")
+
+    # to the left of the first row, add a label for the loop closure status
+    for row_idx in axes_row_idxs:
+        axes[row_idx, 0].text(
+            -0.25,
+            0.5,
+            LOOP_CLOSURE_TITLES[loop_closure_options[row_idx]],
+            horizontalalignment="center",
+            verticalalignment="center",
+            rotation=90,
+            transform=axes[(row_idx, 0)].transAxes,
+            fontsize=26,
+        )
+
+    savedir = "/home/alan/rss23-ra-slam-certification/figures/experiments/manhattan"
+    fpath = join(savedir, "suboptimality_gap_vs_params.png")
+    plt.savefig(fpath)
+    print(f"Saved suboptimality plots to {fpath}")
+
+    plt.show()

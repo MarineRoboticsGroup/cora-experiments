@@ -1,57 +1,49 @@
 from os.path import join
 from utils.generate_manhattan_experiments import (
     MANHATTAN_EXPERIMENTS,
-    generate_manhattan_experiments,
+    USE_LOOP_CLOSURE,
+    LOOP_CLOSURE_OPTIONS,
 )
-from utils.evaluate_manhattan_data import make_manhattan_experiment_plots
-from utils.solve_manhattan_problems import solve_manhattan_problems_in_dir
+from utils.evaluate_manhattan_data import (
+    make_manhattan_subopt_plots,
+)
 from utils.paths import MANHATTAN_DATA_DIR
-import logging, coloredlogs
-
-logger = logging.getLogger(__name__)
-field_styles = {
-    "filename": {"color": "green"},
-    "levelname": {"bold": True, "color": "black"},
-    "name": {"color": "blue"},
-}
-coloredlogs.install(
-    level="INFO",
-    fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
-    field_styles=field_styles,
-)
 
 if __name__ == "__main__":
-    import gc  # garbage collector
 
     experiments = MANHATTAN_EXPERIMENTS
 
-    # experiments = [SWEEP_NUM_ROBOTS]
+    # hardrive_data = "/media/alan/2aa68396-ccc1-40e6-8355-ccfb4d4e7c35/manhattan-experiments"
+    # hardrive_data = "/media/alan/2aa68396-ccc1-40e6-8355-ccfb4d4e7c35/manhattan-experiments-fully-marginalized"
+    hardrive_data = "/media/alan/2aa68396-ccc1-40e6-8355-ccfb4d4e7c35/manhattan-experiments-unmarginalized"
+    make_manhattan_subopt_plots(base_experiment_dir=hardrive_data)
+
     use_all_caches = True
-    for use_loop_closure, loop_closure_subdir in [
-        (True, "default_with_loop_closures"),
-        (False, "default_no_loop_closures"),
-    ]:
+    for loop_closure_subdir in LOOP_CLOSURE_OPTIONS[::1]:
+        use_loop_closure = loop_closure_subdir == USE_LOOP_CLOSURE
         exp_base_dir = join(MANHATTAN_DATA_DIR, loop_closure_subdir)
-        generate_manhattan_experiments(
-            exp_base_dir,
-            default_use_loop_closures=use_loop_closure,
-            experiments=experiments,
-            use_cached_experiments=True or use_all_caches,
-            num_repeats_per_param=30,
-        )
-        # garbage collect to free up memory
-        gc.collect()
-        for e in experiments:
-            problem_dir = join(exp_base_dir, e)
-            solve_manhattan_problems_in_dir(
-                problem_dir,
-                use_cached_results=True or use_all_caches,
-                show_animations=False,
-            )
-        gc.collect()
-        make_manhattan_experiment_plots(
-            base_experiment_dir=exp_base_dir,
-            subexperiment_types=experiments,
-            use_cached_sweep_results=True or use_all_caches,
-            use_cached_subexp_results=True or use_all_caches,
-        )
+        # generate_manhattan_experiments(
+        #     exp_base_dir,
+        #     default_use_loop_closures=use_loop_closure,
+        #     experiments=experiments,
+        #     use_cached_experiments=True or use_all_caches,
+        #     num_repeats_per_param=20,
+        # )
+        # gc.collect()
+        # for e in experiments[::1]:
+        #     problem_dir = join(exp_base_dir, e)
+        #     try:
+        #         solve_manhattan_problems_in_dir(
+        #             problem_dir,
+        #             use_cached_results=True or use_all_caches,
+        #             show_animations=False,
+        #         )
+        #     except Exception as e:
+        #         logger.error(f"Error solving problems in {problem_dir}: {e}")
+        # gc.collect()
+        # make_manhattan_rmse_plots(
+        #     base_experiment_dir=exp_base_dir,
+        #     subexperiment_types=experiments,
+        #     use_cached_sweep_results=True or use_all_caches,
+        #     use_cached_subexp_results=True or use_all_caches,
+        # )

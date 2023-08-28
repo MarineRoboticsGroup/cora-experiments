@@ -2,10 +2,10 @@ import os
 from os.path import join, exists
 import pickle
 import copy
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import numpy as np
 
-from py_factor_graph.io.pickle_file import parse_pickle_file
+from py_factor_graph.io.pyfg_text import read_from_pyfg_text
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 import pandas as pd
@@ -15,24 +15,11 @@ from evo.core.trajectory import PoseTrajectory3D
 from evo.core.geometry import umeyama_alignment
 
 from .gtsam_solve_utils import write_gtsam_optimized_soln_to_tum
+from .logging_utils import logger
 
 from attrs import define, field
 
-import logging, coloredlogs
 from functools import partial
-
-logger = logging.getLogger(__name__)
-field_styles = {
-    "filename": {"color": "green"},
-    "levelname": {"bold": True, "color": "black"},
-    "name": {"color": "blue"},
-}
-coloredlogs.install(
-    level="INFO",
-    fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
-    field_styles=field_styles,
-)
-
 
 VALID_ROBOT_CHARS = [chr(ord("A") + i) for i in range(26)]
 VALID_ROBOT_CHARS.remove("L")
@@ -42,18 +29,26 @@ CORA_STR = "cora"
 GT_STR = "gt_traj"
 
 from .gtsam_solve_utils import (
-    GTSAM_ODOM_INIT as GTSAM_ODOM_STR,
-    GTSAM_SCORE_INIT as GTSAM_SCORE_STR,
-    GTSAM_RANDOM_INIT as GTSAM_RANDOM_STR,
+    GTSAM_SCORE_INIT,
+    GTSAM_GT_POSE_GT_LAND,
+    GTSAM_GT_POSE_RAND_LAND,
+    GTSAM_RAND_POSE_RAND_LAND,
+    GTSAM_RAND_POSE_GT_LAND,
 )
 
-GTSAM_LEADING_STRS = [GTSAM_ODOM_STR, GTSAM_SCORE_STR, GTSAM_RANDOM_STR]
+GTSAM_LEADING_STRS = [
+    GTSAM_SCORE_INIT,
+    GTSAM_GT_POSE_GT_LAND,
+    GTSAM_GT_POSE_RAND_LAND,
+    GTSAM_RAND_POSE_RAND_LAND,
+    GTSAM_RAND_POSE_GT_LAND,
+]
 
 # only add the score string if score is available
 from .gtsam_solve_utils import SCORE_AVAILABLE
 
 if not SCORE_AVAILABLE:
-    GTSAM_LEADING_STRS.remove(GTSAM_SCORE_STR)
+    GTSAM_LEADING_STRS.remove(GTSAM_SCORE_INIT)
 
 ALL_LEADING_STRS = [CORA_STR, GT_STR] + GTSAM_LEADING_STRS
 
@@ -92,40 +87,105 @@ def _get_tum_fpaths(results_dir: str, leading_str: str, num_robots: int) -> List
 
 GT_TRAJ_LABEL = "Ground Truth"
 CORA_TRAJ_LABEL = "CORA"
-GTSAM_ODOM_TRAJ_LABEL = "GTSAM (GTS)"
-GTSAM_RANDOM_TRAJ_LABEL = "GTSAM (RS)"
+GTSAM_GT_POSE_GT_LAND_LABEL = "GTSAM (GT-GT)"
+GTSAM_GT_POSE_RAND_LAND_LABEL = "GTSAM (GT-R)"
+GTSAM_RAND_POSE_RAND_LAND_LABEL = "GTSAM (R-R)"
+GTSAM_RAND_POSE_GT_LAND_LABEL = "GTSAM (R-GT)"
 GTSAM_SCORE_TRAJ_LABEL = "GTSAM (SCORE)"
+
+PREFERRED_LABEL_ORDERING = [
+    CORA_TRAJ_LABEL,
+    GTSAM_SCORE_TRAJ_LABEL,
+    GTSAM_GT_POSE_GT_LAND_LABEL,
+    GTSAM_GT_POSE_GT_LAND_LABEL.replace("GT-", ""),
+    GTSAM_GT_POSE_RAND_LAND_LABEL,
+    GTSAM_GT_POSE_RAND_LAND_LABEL.replace("GT-", ""),
+    GTSAM_RAND_POSE_RAND_LAND_LABEL,
+    GTSAM_RAND_POSE_GT_LAND_LABEL,
+]
+
 
 TRAJ_LABEL_TO_COLOR = {
     GT_TRAJ_LABEL: "gray",
     CORA_TRAJ_LABEL: "blue",
-    GTSAM_ODOM_TRAJ_LABEL: "red",
-    GTSAM_RANDOM_TRAJ_LABEL: "seagreen",
+    GTSAM_GT_POSE_GT_LAND_LABEL: "red",
+    GTSAM_GT_POSE_GT_LAND_LABEL.replace(
+        "GT-", ""
+    ): "red",  # remove the GT- prefix from the name
+    GTSAM_GT_POSE_RAND_LAND_LABEL: "green",
+    GTSAM_GT_POSE_RAND_LAND_LABEL.replace(
+        "GT-", ""
+    ): "green",  # remove the GT- prefix from the name
+    GTSAM_RAND_POSE_RAND_LAND_LABEL: "salmon",
+    GTSAM_RAND_POSE_GT_LAND_LABEL: "purple",
     GTSAM_SCORE_TRAJ_LABEL: "orange",
 }
 
 
 @define
 class ResultsPoseTrajCollection:
-    """The results of the single_drone experiment"""
+    """The results of a single experiment"""
 
     gt_traj: PoseTrajectory3D = field()
     cora_traj: PoseTrajectory3D = field()
-    gtsam_odom_traj: PoseTrajectory3D = field()
-    gtsam_random_traj: Optional[PoseTrajectory3D] = field()
+    gtsam_gt_pose_gt_land: PoseTrajectory3D = field()
+    gtsam_gt_pose_rand_land: PoseTrajectory3D = field()
+    gtsam_rand_pose_rand_land: Optional[PoseTrajectory3D] = field()
+    gtsam_rand_pose_gt_land: Optional[PoseTrajectory3D] = field()
     gtsam_score_traj: Optional[PoseTrajectory3D] = field()
 
     def __str__(self) -> str:
         return f"ResultsPoseTrajCollection with trajectories: {self.all_traj_names}"
 
     @property
+    def num_comp_trajs(self) -> int:
+        return len(self.comparison_trajs)
+
+    @property
+    def ordered_comp_name_color_triplets(
+        self,
+    ) -> Tuple[List[PoseTrajectory3D], List[str], List[str]]:
+        comp_trajs = self.comparison_trajs
+        comp_names = self.comparison_traj_names
+        comp_colors = self.comparison_traj_colors
+        assert len(comp_trajs) == len(comp_names) == len(comp_colors)
+
+        triplets = list(zip(comp_trajs, comp_names, comp_colors))
+
+        # sort by preferred name ordering
+        def _get_name_ordering(name: str) -> int:
+            return PREFERRED_LABEL_ORDERING.index(name)
+
+        triplets.sort(key=lambda x: _get_name_ordering(x[1]))
+
+        sorted_comp_trajs, sorted_comp_names, sorted_comp_colors = zip(*triplets)
+        assert (
+            len(sorted_comp_trajs) == len(sorted_comp_names) == len(sorted_comp_colors)
+        )
+        assert all([isinstance(traj, PoseTrajectory3D) for traj in sorted_comp_trajs])
+        assert all([name in PREFERRED_LABEL_ORDERING for name in sorted_comp_names])
+        assert all(
+            [color in TRAJ_LABEL_TO_COLOR.values() for color in sorted_comp_colors]
+        )
+        return sorted_comp_trajs, sorted_comp_names, sorted_comp_colors
+
+    @property
+    def multi_robot_trajs_available(self) -> bool:
+        return (
+            self.gtsam_rand_pose_rand_land is not None
+            and self.gtsam_rand_pose_gt_land is not None
+        )
+
+    @property
     def comparison_trajs(self) -> List[PoseTrajectory3D]:
         comparison_trajs = [
             self.cora_traj,
-            self.gtsam_odom_traj,
+            self.gtsam_gt_pose_gt_land,
+            self.gtsam_gt_pose_rand_land,
         ]
-        if self.gtsam_random_traj is not None:
-            comparison_trajs.append(self.gtsam_random_traj)
+        if self.multi_robot_trajs_available:
+            comparison_trajs.append(self.gtsam_rand_pose_gt_land)
+            comparison_trajs.append(self.gtsam_rand_pose_rand_land)
 
         if self.gtsam_score_traj is not None:
             comparison_trajs.append(self.gtsam_score_traj)
@@ -136,10 +196,16 @@ class ResultsPoseTrajCollection:
     def comparison_traj_names(self) -> List[str]:
         names = [
             CORA_TRAJ_LABEL,
-            GTSAM_ODOM_TRAJ_LABEL,
+            GTSAM_GT_POSE_GT_LAND_LABEL,
+            GTSAM_GT_POSE_RAND_LAND_LABEL,
         ]
-        if self.gtsam_random_traj is not None:
-            names.append(GTSAM_RANDOM_TRAJ_LABEL)
+        if self.multi_robot_trajs_available:
+            names.append(GTSAM_RAND_POSE_GT_LAND_LABEL)
+            names.append(GTSAM_RAND_POSE_RAND_LAND_LABEL)
+        else:
+            # remove the GT- prefix from the name
+            names = [name.replace("GT-", "") for name in names]
+
         if self.gtsam_score_traj is not None:
             names.append(GTSAM_SCORE_TRAJ_LABEL)
         return names
@@ -181,21 +247,18 @@ class ResultsPoseTrajCollection:
         }
 
 
-def _check_traj_error_df(expected_indices: List[str], df: pd.DataFrame):
+def _check_traj_error_df(
+    expected_indices: List[str], expected_cols: List[str], df: pd.DataFrame
+):
     """Check that the traj error df is valid"""
     assert isinstance(df, pd.DataFrame)
     assert df.shape[0] == len(expected_indices)
-    expected_cols = [
-        "rmse",
-        "mean",
-        "median",
-        "std",
-        "min",
-        "max",
-        "sse",
-    ]
-    assert df.shape[1] == len(expected_cols)
-    assert set(df.index) == set(expected_indices)
+    assert df.shape[1] == len(
+        expected_cols
+    ), f"Expected {expected_cols} but got {df.columns}"
+    assert set(df.index) == set(
+        expected_indices
+    ), f"Expected {expected_indices} but got {df.index}"
     assert set(df.columns) == set(expected_cols)
 
 
@@ -214,15 +277,42 @@ class TrajErrorDfs:
     """
 
     expected_indices: List[str] = field()
+    expected_cols: List[str] = field()
     rot_error_df: pd.DataFrame = field()
     trans_error_df: pd.DataFrame = field()
     pose_error_df: pd.DataFrame = field()
+    cmap: Dict[str, str] = field()
+    trajs_are_indices: bool = field()  # traj names are either indices or columns
 
     # after initialization validate that the indices are correct
     def __attrs_post_init__(self):
-        _check_traj_error_df(self.expected_indices, self.rot_error_df)
-        _check_traj_error_df(self.expected_indices, self.trans_error_df)
-        _check_traj_error_df(self.expected_indices, self.pose_error_df)
+        _check_traj_error_df(
+            self.expected_indices, self.expected_cols, self.rot_error_df
+        )
+        _check_traj_error_df(
+            self.expected_indices, self.expected_cols, self.trans_error_df
+        )
+        _check_traj_error_df(
+            self.expected_indices, self.expected_cols, self.pose_error_df
+        )
+        # check number of keys in cmap is the same as the number of indices
+        if self.trajs_are_indices:
+            expected_keys = set(self.expected_indices)
+        else:
+            expected_keys = set(self.expected_cols)
+        assert (
+            set(self.cmap.keys()) == expected_keys
+        ), f"Expected {expected_keys} but got {set(self.cmap.keys())}"
+
+    def __str__(self):
+        val = ""
+        val += f"Rotation Error:\n{self.rot_error_df}\n"
+        val += f"Translation Error:\n{self.trans_error_df}\n"
+        return val
+
+    def plot_ape_errors(self, rot_ax: plt.Axes, tran_ax: plt.Axes) -> None:
+        _plot_rot(self.rot_error_df, rot_ax, cmap=self.cmap)
+        _plot_trans(self.trans_error_df, tran_ax, cmap=self.cmap)
 
 
 #### File Utils ####
@@ -230,9 +320,7 @@ class TrajErrorDfs:
 
 def get_pyfg_file_name_in_dir(target_dir: str) -> str:
     file_names = os.listdir(target_dir)
-    candidate_pyfg_files = [
-        f for f in file_names if f.endswith("seed.pickle") or f == "factor_graph.pickle"
-    ]
+    candidate_pyfg_files = [f for f in file_names if f.endswith(".pyfg")]
     no_pyfg_files_found = len(candidate_pyfg_files) == 0
     if no_pyfg_files_found:
         raise FileNotFoundError(
@@ -258,7 +346,8 @@ def check_dir_ready_for_evaluation(target_dir: str) -> None:
     """
     pyfg_file_name = get_pyfg_file_name_in_dir(target_dir)
     pyfg_file = join(target_dir, pyfg_file_name)
-    pyfg = parse_pickle_file(pyfg_file)
+    logger.info(f"Found PyFG file: {pyfg_file}")
+    pyfg = read_from_pyfg_text(pyfg_file)
     num_robots = pyfg.num_robots
     expected_tum_fpaths = _get_tum_fpaths(target_dir, CORA_STR, num_robots)
     for tum_file in expected_tum_fpaths:
@@ -284,7 +373,7 @@ def get_aligned_traj_results_in_dir(
         logger.info(f"Aligning results in {results_dir}")
         pyfg_file_name = get_pyfg_file_name_in_dir(results_dir)
         fg_path = join(results_dir, pyfg_file_name)
-        pyfg = parse_pickle_file(fg_path)
+        pyfg = read_from_pyfg_text(fg_path)
         num_robots = pyfg.num_robots
 
         def _all_files_exist(fpaths: List[str]) -> bool:
@@ -305,17 +394,23 @@ def get_aligned_traj_results_in_dir(
         if _should_write_new_tum_files(GT_STR, use_cached_results, num_robots):
             pyfg.write_pose_gt_to_tum(results_dir)
 
-        gtsam_experiments = GTSAM_LEADING_STRS
+        gtsam_experiments = copy.deepcopy(GTSAM_LEADING_STRS)
         if pyfg.num_robots == 1:
-            gtsam_experiments.remove(GTSAM_RANDOM_STR)
-            logger.info(f"Single robot problem, not testing with {GTSAM_RANDOM_STR}")
+            gtsam_experiments.remove(GTSAM_RAND_POSE_RAND_LAND)
+            gtsam_experiments.remove(GTSAM_RAND_POSE_GT_LAND)
+            logger.debug(
+                f"Single robot problem, not testing with random pose initializations"
+            )
         else:
-            logger.info(f"Multirobot problem, also testing with {GTSAM_RANDOM_STR}")
+            logger.debug(
+                f"Multirobot problem, also testing with {GTSAM_RAND_POSE_RAND_LAND}"
+            )
 
         for gtsam_leading_str in gtsam_experiments:
             if _should_write_new_tum_files(
                 gtsam_leading_str, use_cached_results, num_robots
             ):
+                logger.info(f"Need to write new {gtsam_leading_str} tum files")
                 write_gtsam_optimized_soln_to_tum(
                     pyfg, results_dir=results_dir, init_strategy=gtsam_leading_str
                 )
@@ -390,10 +485,12 @@ def get_aligned_traj_results_in_dir(
             # if 2D problem and the rotation flips around z, then let's just
             # align to the origin. We encountered this problem with sufficiently
             # bad estimates from GTSAM
-            if "tiers" in results_dir and align_rot[2, 2] < 0:
-                logger.info(f"Umeyama alignment flipped the rotation matrix around z")
-                traj_aligned.align_origin(ref_traj)
-                return traj_aligned
+            # align_origin_dirs = ["tiers", "plaza1"]
+            # is_align_origin = any([d in results_dir for d in align_origin_dirs])
+            # if is_align_origin and align_rot[2, 2] < 0:
+            #     logger.info(f"Umeyama alignment flipped the rotation matrix around z")
+            #     traj_aligned.align_origin(ref_traj)
+            #     return traj_aligned
 
             transform = np.eye(4)
             transform[:3, :3] = align_rot
@@ -414,9 +511,15 @@ def get_aligned_traj_results_in_dir(
         aligned_results = ResultsPoseTrajCollection(
             gt_traj=gt_traj,
             cora_traj=aligned_joined_trajs[CORA_STR],
-            gtsam_odom_traj=aligned_joined_trajs[GTSAM_ODOM_STR],
-            gtsam_score_traj=aligned_joined_trajs.get(GTSAM_SCORE_STR, None),
-            gtsam_random_traj=aligned_joined_trajs.get(GTSAM_RANDOM_STR, None),
+            gtsam_gt_pose_gt_land=aligned_joined_trajs[GTSAM_GT_POSE_GT_LAND],
+            gtsam_gt_pose_rand_land=aligned_joined_trajs[GTSAM_GT_POSE_RAND_LAND],
+            gtsam_rand_pose_gt_land=aligned_joined_trajs.get(
+                GTSAM_RAND_POSE_GT_LAND, None
+            ),
+            gtsam_rand_pose_rand_land=aligned_joined_trajs.get(
+                GTSAM_RAND_POSE_RAND_LAND, None
+            ),
+            gtsam_score_traj=aligned_joined_trajs.get(GTSAM_SCORE_INIT, None),
         )
         pickle.dump(aligned_results, open(aligned_results_pickle_path, "wb"))
 
@@ -439,7 +542,6 @@ def make_evo_traj_plots(
     """
 
     for plot_mode in valid_plot_views:
-
         # make figure the full screen size
         fig = plt.figure(figsize=(20, 10))
 
@@ -455,17 +557,32 @@ def make_evo_traj_plots(
             # some configs just for the xyz plot
             if plot_mode == plot.PlotMode.xyz:
                 plt.rcParams["axes.labelpad"] = 20.0
+            elif plot_mode == plot.PlotMode.xz:
+                plt.rcParams["axes.labelpad"] = 10.0
+                plt.rcParams["figure.subplot.hspace"] = 0.05
+                plt.rcParams["grid.linewidth"] = 2
 
             # set grid color: https://matplotlib.org/stable/gallery/color/named_colors.html
-            plt.rcParams["grid.color"] = "gainsboro"
+            plt.rcParams["grid.color"] = "gray"
+            if overlay_river_image:
+                plt.rcParams["grid.color"] = "lightgray"
+                plt.rcParams["figure.subplot.hspace"] = 0.01
+
             plt.rcParams["axes.edgecolor"] = "gray"
 
         _improve_plot_config()
 
         # make 1xn grid of axes
-        num_plots = len(aligned_results.comparison_trajs)
+        num_plots = aligned_results.num_comp_trajs
         axes_idxs = list(range(num_plots))
-        subplot_args = [int(f"1{num_plots}{i+1}") for i in axes_idxs]
+        if num_plots <= 4:
+            num_rows = 1
+            num_cols = num_plots
+        else:
+            num_rows = 2
+            num_cols = num_plots // 2
+
+        subplot_args = [int(f"{num_rows}{num_cols}{i+1}") for i in axes_idxs]
         axes = [
             plot.prepare_axis(fig, plot_mode, subplot_arg=subplot_arg)
             for subplot_arg in subplot_args
@@ -514,25 +631,23 @@ def make_evo_traj_plots(
         gt_traj = aligned_results.gt_traj
         gt_traj_name = GT_TRAJ_LABEL
         gt_traj_color = TRAJ_LABEL_TO_COLOR[gt_traj_name]
+        (
+            ordered_comparison_trajs,
+            ordered_comparison_names,
+            ordered_comparison_colors,
+        ) = aligned_results.ordered_comp_name_color_triplets
         for idx, traj, name, color in zip(
             axes_idxs,
-            aligned_results.comparison_trajs,
-            aligned_results.comparison_traj_names,
-            aligned_results.comparison_traj_colors,
+            ordered_comparison_trajs,
+            ordered_comparison_names,
+            ordered_comparison_colors,
         ):
             ax = axes[idx]
             _plot_traj(ax, gt_traj, gt_traj_name, gt_traj_color, "--")
             _plot_traj(ax, traj, name, color, "-")
             ax.legend(frameon=True)
 
-            if plot_mode != plot.PlotMode.xyz:
-                ax.grid(False)
             ax.set_facecolor("white")
-
-            # only have y labels on the left column for 2D plots
-            if idx != 0 and plot_mode != plot.PlotMode.xyz:
-                ax.set_yticklabels([])
-                ax.set_ylabel("")
 
         if overlay_river_image:
             from .paths import DATA_DIR
@@ -553,9 +668,15 @@ def make_evo_traj_plots(
                 ax = axes[idx]
                 ax.imshow(river_img, extent=[xmin, xmax, ymin, ymax], alpha=1, zorder=0)
 
-                # move the lines to the front
+                # move the lines to the front (but with room for the legend)
                 for line in ax.lines:
                     line.set_zorder(10)
+
+                # make sure the legend is on top
+                ax.get_legend().set_zorder(20)
+
+            # reduce padding or buffer between plots
+            plt.subplots_adjust(left=0.10, right=0.95, wspace=0.05)
 
         # make all axes the same size
         ax_xmin, ax_xmax = axes[0].get_xlim()
@@ -576,26 +697,60 @@ def make_evo_traj_plots(
                 ax.set_xlim(ax_xmin, ax_xmax)
                 ax.set_ylim(ax_ymin, ax_ymax)
 
-        # shift the axes values such that they start at zero and are non-negative
-        tick_increment = 10
+        def _get_tick_increment_from_range(minval, maxval) -> int:
+            val_range = maxval - minval
+            # choose an increment such that there will be 3 or 4 ticks on the axis
+            tick_options = [1, 2, 4, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000]
+            for tick_option in tick_options:
+                if val_range / tick_option <= 4:
+                    return tick_option
 
-        def shift_formatter(ax_min, x, pos):
+            return tick_options[-1]
+
+        x_tick_increment = _get_tick_increment_from_range(ax_xmin, ax_xmax)
+        y_tick_increment = _get_tick_increment_from_range(ax_ymin, ax_ymax)
+
+        # shift the axes values such that they start at zero and are non-negative
+        def shift_formatter(ax_min, tick_increment, x, pos):
             # shift such that the least value is 0 and each tick is rounded down to
-            # nearest multiple of 10
+            # nearest multiple of tick_increment
             shifted_val = x - ax_min
             rounded_val = np.floor(shifted_val / tick_increment) * tick_increment
             return f"{rounded_val:.0f}"
 
-        shift_formatter_y = ticker.FuncFormatter(partial(shift_formatter, ax_ymin))
-        shift_formatter_x = ticker.FuncFormatter(partial(shift_formatter, ax_xmin))
-        for ax in axes:
-            ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_increment))
-            ax.yaxis.set_major_locator(ticker.MultipleLocator(tick_increment))
+        shift_formatter_y = ticker.FuncFormatter(
+            partial(shift_formatter, ax_ymin, y_tick_increment)
+        )
+        shift_formatter_x = ticker.FuncFormatter(
+            partial(shift_formatter, ax_xmin, x_tick_increment)
+        )
+        for idx, ax in enumerate(axes):
+            cur_row = idx // num_cols
+            cur_col = idx % num_cols
+
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(x_tick_increment))
+            ax.yaxis.set_major_locator(ticker.MultipleLocator(y_tick_increment))
             ax.xaxis.set_major_formatter(shift_formatter_x)
             ax.yaxis.set_major_formatter(shift_formatter_y)
 
+            # only have y labels and ticks on the left column for 2D plots
+            if cur_col != 0 and plot_mode != plot.PlotMode.xyz:
+                ax.set_yticklabels([])
+                ax.set_ylabel("")
+                ax.tick_params(axis="y", which="both", length=0)
+
+            # only have x labels and ticks on the bottom row for 2D plots
+            if cur_row != num_rows - 1 and plot_mode != plot.PlotMode.xyz:
+                ax.set_xticklabels([])
+                ax.set_xlabel("")
+                ax.tick_params(axis="x", which="both", length=0)
+
+            plot.set_aspect_equal(ax)
+
+            # make sure grid is on
+            ax.grid(True, which="both", axis="both")
+
         traj_plot_path = join(results_dir, f"traj_plot_{plot_mode.name}.png")
-        # plt.grid(False)
         plt.savefig(traj_plot_path, transparent=True, dpi=fig.dpi)
         plt.savefig(
             traj_plot_path.replace(".png", ".svg"),
@@ -608,6 +763,67 @@ def make_evo_traj_plots(
         else:
             plt.close(fig)
         logger.info(f"Saved trajectories to: {traj_plot_path}")
+
+
+def clean_df_collection(dfs: TrajErrorDfs) -> TrajErrorDfs:
+    stats_to_keep = ["rmse", "max"]
+    stat_renaming = {"rmse": "RMSE", "max": "Max"}
+    current_indices = dfs.rot_error_df.index.tolist()
+
+    def _clean_df(df) -> pd.DataFrame:
+        stats_to_drop = [stat for stat in df.columns if stat not in stats_to_keep]
+        new_df = df.swapaxes("index", "columns")
+        new_df.drop(stats_to_drop, axis=0, inplace=True)
+        new_df.rename(index=stat_renaming, inplace=True)
+        return new_df
+
+    expected_indices = [stat_renaming[stat] for stat in stats_to_keep]
+    cleaned_tran_df = _clean_df(dfs.trans_error_df)
+    cleaned_rot_df = _clean_df(dfs.rot_error_df)
+    cleaned_pose_df = _clean_df(dfs.pose_error_df)
+    return TrajErrorDfs(
+        expected_indices=expected_indices,
+        expected_cols=current_indices,
+        rot_error_df=cleaned_rot_df,
+        trans_error_df=cleaned_tran_df,
+        pose_error_df=cleaned_pose_df,
+        cmap=dfs.cmap,
+        trajs_are_indices=False,
+    )
+
+
+def _set_yticks_only_ints(ax: plt.Axes):
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+
+def _plot_trans(df_trans: pd.DataFrame, target_ax: plt.Axes, cmap: Dict[str, str]):
+    df_trans.plot.bar(ax=target_ax, ylabel="Translation Error (meters)", color=cmap)
+    ylim_top_min = 3.0
+    if target_ax.get_ylim()[1] < ylim_top_min:
+        target_ax.set_ylim(0, ylim_top_min)
+    target_ax.set_xticklabels(target_ax.get_xticklabels(), rotation=0)
+    target_ax.set_facecolor("white")
+    target_ax.grid(visible=False, which="both", axis="x")
+    # target_ax.grid(False)
+    # _set_yaxis_to_log_if_order_magnitude_range(target_ax)
+
+
+def _plot_rot(df_rot: pd.DataFrame, target_ax: plt.Axes, cmap: Dict[str, str]):
+    df_rot.plot.bar(ax=target_ax, ylabel="Rotation Error (degrees)", color=cmap)
+    # ylim_top_min = 110
+    # if target_ax.get_ylim()[1] < ylim_top_min:
+    #     target_ax.set_ylim(0, ylim_top_min)
+    # ylim_top = target_ax.get_ylim()[1]
+    # target_ax.set_ylim(0, ylim_top*(1.4))
+    _set_yticks_only_ints(target_ax)
+    target_ax.legend(frameon=True, loc="upper left")
+
+    target_ax.set_xticklabels(target_ax.get_xticklabels(), rotation=0)
+    target_ax.set_facecolor("white")
+    target_ax.grid(visible=False, which="both", axis="x")
+
+    # target_ax.grid(False)
+    # _set_yaxis_to_log_if_order_magnitude_range(target_ax)
 
 
 def make_plots_from_error_dfs(
@@ -652,6 +868,7 @@ def make_plots_from_error_dfs(
 
     plt.rcParams["grid.color"] = "gray"
     plt.rcParams["axes.edgecolor"] = "gray"
+    plt.rcParams["legend.loc"] = "upper left"
 
     saved_figs = []
 
@@ -668,83 +885,31 @@ def make_plots_from_error_dfs(
             # turn on minor grid lines
             ax.grid(which="minor", axis="y")
 
-    def _plot_trans(target_ax: plt.Axes):
-        df_trans.plot.bar(
-            ax=target_ax, ylabel="Translation Error (meters)", color=color_map
-        )
-        ylim_top_min = 3.0
-        if target_ax.get_ylim()[1] < ylim_top_min:
-            target_ax.set_ylim(0, ylim_top_min)
-        target_ax.set_xticklabels(target_ax.get_xticklabels(), rotation=0)
-        target_ax.set_facecolor("white")
-        target_ax.grid(visible=False, which="both", axis="x")
-        # target_ax.grid(False)
-        # _set_yaxis_to_log_if_order_magnitude_range(target_ax)
-
-    def _plot_rot(target_ax: plt.Axes):
-        df_rot.plot.bar(
-            ax=target_ax, ylabel="Rotation Error (degrees)", color=color_map
-        )
-        ylim_top_min = 110
-        if target_ax.get_ylim()[1] < ylim_top_min:
-            target_ax.set_ylim(0, ylim_top_min)
-        target_ax.set_xticklabels(target_ax.get_xticklabels(), rotation=0)
-        target_ax.set_facecolor("white")
-        target_ax.grid(visible=False, which="both", axis="x")
-        # target_ax.grid(False)
-        # _set_yaxis_to_log_if_order_magnitude_range(target_ax)
-
-    def _plot_pose(target_ax: plt.Axes):
-        df_pose.plot.bar(ax=target_ax, ylabel="Average Pose Error", color=color_map)
+    def _plot_pose(target_ax: plt.Axes, cmap: Dict[str, str]):
+        df_pose.plot.bar(ax=target_ax, ylabel="Average Pose Error", color=cmap)
         target_ax.set_xticklabels(target_ax.get_xticklabels(), rotation=0)
         # target_ax.grid(False)
 
     # make bar plots
     default_figsize = (16, 8)
 
-    def _three_bar_plot():
-        fig, axs = plt.subplots(1, 3, figsize=default_figsize)
-        _plot_trans(axs[0])
-        _plot_rot(axs[1])
-        _plot_pose(axs[2])
-        fig.tight_layout()
-        three_bar_plot_path = join(save_dir, "three_bar_plot.png")
-        _save_fig(three_bar_plot_path)
-
     # make two bar plot with translation and rotation
     def _two_bar_plot():
         fig, axs = plt.subplots(1, 2, figsize=default_figsize)
-        _plot_trans(axs[0])
-        _plot_rot(axs[1])
+        _plot_trans(df_trans, axs[0], color_map)
+        _plot_rot(df_rot, axs[1], color_map)
         fig.subplots_adjust(wspace=0.3)
         two_bar_plot_path = join(save_dir, "two_bar_plot.png")
         _save_fig(two_bar_plot_path)
 
-    # also make single plots for each set of stats (trans/rot/pose)
-    def _translation_plot():
-        fig, ax = plt.subplots(figsize=default_figsize)
-        _plot_trans(ax)
-        trans_bar_path = join(save_dir, "translation_error.png")
-        _save_fig(trans_bar_path)
-
-    def _rot_plot():
-        fig, ax = plt.subplots(figsize=default_figsize)
-        _plot_rot(ax)
-        rot_bar_path = join(save_dir, "rotation_error.png")
-        _save_fig(rot_bar_path)
-
-    # _three_bar_plot()
     _two_bar_plot()
-    # _translation_plot()
-    # _rot_plot()
     if show_plots:
         plt.show()
     else:
         plt.close("all")
 
-    logger.info(f"Saved plots to: {save_dir}")
     for f in saved_figs:
-        logger.info(f"File: {f}")
+        logger.info(f"Saved: {f}")
 
 
 def make_evo_ape_plots_from_trajs(
@@ -782,7 +947,11 @@ def get_ape_error_stats_from_aligned_trajs(
         return collected_error_dfs
 
     gt_traj = aligned_results.gt_traj
-    comparison_trajs = aligned_results.comparison_trajs
+    (
+        comparison_trajs,
+        comparison_traj_names,
+        _,
+    ) = aligned_results.ordered_comp_name_color_triplets
 
     # get translation error
     translation_errors: List[Dict[str, float]] = []
@@ -808,7 +977,6 @@ def get_ape_error_stats_from_aligned_trajs(
         pose_stats = pose_metric.get_all_statistics()
         pose_errors.append(pose_stats)
 
-    comparison_traj_names = aligned_results.comparison_traj_names
     df_trans = pd.DataFrame(
         translation_errors,
         index=comparison_traj_names,
@@ -822,11 +990,15 @@ def get_ape_error_stats_from_aligned_trajs(
         index=comparison_traj_names,
     )
 
+    all_error_stats = ["rmse", "mean", "median", "std", "min", "max", "sse"]
     collected_error_dfs = TrajErrorDfs(
         expected_indices=comparison_traj_names,
+        expected_cols=all_error_stats,
         rot_error_df=df_rot,
         trans_error_df=df_trans,
         pose_error_df=df_pose,
+        cmap=aligned_results.comparison_traj_color_map,
+        trajs_are_indices=True,
     )
 
     pickle.dump(collected_error_dfs, open(ape_error_stats_path, "wb"))

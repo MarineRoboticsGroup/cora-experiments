@@ -2,34 +2,15 @@ import math
 from os import makedirs
 from os.path import join, isdir, isfile
 from typing import List
-from py_factor_graph.io.pickle_file import parse_pickle_file
+from py_factor_graph.io.pyfg_text import save_to_pyfg_text
 from manhattan.simulator.simulator import ManhattanSimulator, SimulationParams
 from attrs import field, define
 from itertools import product
 import numpy as np
 
-from .paths import REPO_BASE_DIR
-
-import logging, coloredlogs
-
-logger = logging.getLogger(__name__)
-field_styles = {
-    "filename": {"color": "green"},
-    "levelname": {"bold": True, "color": "black"},
-    "name": {"color": "blue"},
-}
-coloredlogs.install(
-    level="INFO",
-    fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
-    field_styles=field_styles,
-)
-
+from .logging_utils import logger
 
 # insert the pyfg_to_matlab directory into the path
-import sys
-
-sys.path.insert(0, REPO_BASE_DIR)
-from pyfg_to_matlab.matlab_interfaces import export_fg_to_matlab_cora_format
 
 MANHATTAN_DEFAULT_EXP = "default"
 SWEEP_NUM_ROBOTS = "sweep_num_robots"
@@ -39,14 +20,28 @@ SWEEP_NUM_POSES = "sweep_num_poses"
 SWEEP_NUM_BEACONS = "sweep_num_beacons"
 SWEEP_PCT_LOOP_CLOSURES = "sweep_pct_loop_closures"
 
+USE_LOOP_CLOSURE = "default_with_loop_closures"
+NO_LOOP_CLOSURE = "default_no_loop_closures"
+LOOP_CLOSURE_OPTIONS = [USE_LOOP_CLOSURE, NO_LOOP_CLOSURE]
+
 MANHATTAN_EXPERIMENTS = [
     SWEEP_NUM_ROBOTS,
-    SWEEP_RANGE_COV,
+    # SWEEP_RANGE_COV,
     SWEEP_NUM_RANGES,
-    SWEEP_NUM_POSES,
+    # SWEEP_NUM_POSES,
     SWEEP_NUM_BEACONS,
-    SWEEP_PCT_LOOP_CLOSURES,
+    # SWEEP_PCT_LOOP_CLOSURES,
 ]
+
+EXPERIMENT_PLOT_TITLES = {
+    SWEEP_NUM_ROBOTS: "Number of Robots",
+    SWEEP_RANGE_COV: "Range Covariance",
+    SWEEP_NUM_RANGES: "Number of Ranges",
+    SWEEP_NUM_POSES: "Number of Poses",
+    SWEEP_NUM_BEACONS: "Number of Beacons",
+    SWEEP_PCT_LOOP_CLOSURES: "Loop Closure Probability",
+}
+
 
 EXPERIMENT_TRAILING_STR = {
     SWEEP_NUM_ROBOTS: "robots",
@@ -162,13 +157,44 @@ def run_manhattan_simulator(exp_save_dir: str, exp_params: ManhattanExpParam) ->
     if show_animation:
         sim.close_plot()
 
-    filename = "factor_graph"
-    save_filepath = sim.save_simulation_data(
-        exp_save_dir, format="pickle", filename=filename
-    )
-    logger.info(f"Saved simulation data to {save_filepath}")
+    filename = "factor_graph.pyfg"
+    if not isdir(exp_save_dir):
+        makedirs(exp_save_dir)
+    save_filepath = join(exp_save_dir, filename)
+    save_to_pyfg_text(sim._factor_graph, save_filepath)
 
     return save_filepath
+
+
+from multiprocessing import Pool, cpu_count
+
+
+def process_experiment(args):
+    params, trial_num, param_sweep_base_dir, experiment, use_cached_experiments = args
+    (
+        num_robots,
+        num_beacons,
+        total_num_poses,
+        num_ranges,
+        pct_loop_closures,
+        range_cov,
+    ) = params
+    packaged_params = ManhattanExpParam(
+        num_robots=num_robots,
+        num_beacons=num_beacons,
+        total_num_poses=total_num_poses,
+        num_range_measurements=num_ranges,
+        pct_loop_closures=pct_loop_closures,
+        range_cov=range_cov,
+        seed=trial_num * 999,
+    )
+    sweep_subexp_dirname = packaged_params.get_experiment_param_as_string(experiment)
+    subexp_dir = join(param_sweep_base_dir, sweep_subexp_dirname, f"trial{trial_num}")
+    expected_saved_fg_fpath = join(subexp_dir, "factor_graph.pyfg")
+    if use_cached_experiments and isfile(expected_saved_fg_fpath):
+        logger.warning(f"Using cached experiment file - {expected_saved_fg_fpath}")
+    else:
+        run_manhattan_simulator(subexp_dir, packaged_params)
 
 
 def generate_manhattan_experiments(
@@ -253,61 +279,68 @@ def generate_manhattan_experiments(
 
         param_sweep_base_dir = join(base_dir, experiment)
 
-        for params in product(
-            num_robots_list,
-            num_beacons_list,
-            num_poses_list,
-            num_ranges_list,
-            pct_loop_closures_list,
-            range_cov_list,
-        ):
+        args_list = [
             (
-                num_robots,
-                num_beacons,
-                total_num_poses,
-                num_ranges,
-                pct_loop_closures,
-                range_cov,
-            ) = params
-            for trial_num in range(num_repeats_per_param):
-                packaged_params = ManhattanExpParam(
-                    num_robots=num_robots,
-                    num_beacons=num_beacons,
-                    total_num_poses=total_num_poses,
-                    num_range_measurements=num_ranges,
-                    pct_loop_closures=pct_loop_closures,
-                    range_cov=range_cov,
-                    seed=trial_num * 999,
-                )
+                params,
+                trial_num,
+                param_sweep_base_dir,
+                experiment,
+                use_cached_experiments,
+            )
+            for params in product(
+                num_robots_list,
+                num_beacons_list,
+                num_poses_list,
+                num_ranges_list,
+                pct_loop_closures_list,
+                range_cov_list,
+            )
+            for trial_num in range(num_repeats_per_param)
+        ]
+        with Pool(cpu_count() - 2) as p:
+            p.map(process_experiment, args_list)
 
-                # get the specific directory name for this sub-experiment (e.g., "4robots")
-                sweep_subexp_dirname = packaged_params.get_experiment_param_as_string(
-                    experiment
-                )
+        # for params in product(
+        #     num_robots_list,
+        #     num_beacons_list,
+        #     num_poses_list,
+        #     num_ranges_list,
+        #     pct_loop_closures_list,
+        #     range_cov_list,
+        # ):
+        #     (
+        #         num_robots,
+        #         num_beacons,
+        #         total_num_poses,
+        #         num_ranges,
+        #         pct_loop_closures,
+        #         range_cov,
+        #     ) = params
+        #     for trial_num in range(num_repeats_per_param):
+        #         packaged_params = ManhattanExpParam(
+        #             num_robots=num_robots,
+        #             num_beacons=num_beacons,
+        #             total_num_poses=total_num_poses,
+        #             num_range_measurements=num_ranges,
+        #             pct_loop_closures=pct_loop_closures,
+        #             range_cov=range_cov,
+        #             seed=trial_num * 999,
+        #         )
 
-                subexp_dir = join(
-                    param_sweep_base_dir, sweep_subexp_dirname, f"trial{trial_num}"
-                )
+        #         # get the specific directory name for this sub-experiment (e.g., "4robots")
+        #         sweep_subexp_dirname = packaged_params.get_experiment_param_as_string(
+        #             experiment
+        #         )
 
-                # run the simulator and save the factor graph to a pickle file
-                expected_saved_fg_fpath = join(subexp_dir, "factor_graph.pickle")
-                if use_cached_experiments and isfile(expected_saved_fg_fpath):
-                    logger.warning(f"Using cached .pickle experiment - {subexp_dir}")
-                    factor_graph_file = expected_saved_fg_fpath
-                else:
-                    factor_graph_file = run_manhattan_simulator(
-                        subexp_dir, packaged_params
-                    )
+        #         subexp_dir = join(
+        #             param_sweep_base_dir, sweep_subexp_dirname, f"trial{trial_num}"
+        #         )
 
-                # convert the data to our matlab format
-                fg = parse_pickle_file(factor_graph_file)
-
-                expected_saved_matlab_fpath = join(subexp_dir, "factor_graph.mat")
-                if use_cached_experiments and isfile(expected_saved_matlab_fpath):
-                    logger.warning(
-                        f"Using cached .mat version of experiment - {subexp_dir}"
-                    )
-                else:
-                    mat_file = factor_graph_file.replace(".pickle", ".mat")
-                    export_fg_to_matlab_cora_format(fg, matlab_filepath=mat_file)
-                print()
+        #         # run the simulator and save the factor graph to a pickle file
+        #         expected_saved_fg_fpath = join(subexp_dir, "factor_graph.pyfg")
+        #         if use_cached_experiments and isfile(expected_saved_fg_fpath):
+        #             logger.warning(f"Using cached experiment file - {expected_saved_fg_fpath}")
+        #         else:
+        #             run_manhattan_simulator(
+        #                 subexp_dir, packaged_params
+        #             )

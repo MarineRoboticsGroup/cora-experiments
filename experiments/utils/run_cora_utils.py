@@ -2,31 +2,13 @@ import matlab.engine
 import os
 from typing import Optional
 from .evaluate_utils import check_dir_ready_for_evaluation
-
-import logging, coloredlogs
-
-logger = logging.getLogger(__name__)
-field_styles = {
-    "filename": {"color": "green"},
-    "levelname": {"bold": True, "color": "black"},
-    "name": {"color": "blue"},
-}
-coloredlogs.install(
-    level="INFO",
-    fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
-    field_styles=field_styles,
-)
+from .logging_utils import logger
 
 
-def run_cora(
-    cora_matlab_dirpath: str = os.path.expanduser(
-        "~/range-only-slam-mission-control/cora/MATLAB"
-    ),
-    experiment_fpath: Optional[str] = None,
-    experiment_dir: Optional[str] = None,
-    show_animation: bool = True,
-    animation_show_gt: bool = True,
-    look_for_cached_cora_solns: bool = False,
+def experiment_inputs_are_valid(
+    cora_matlab_dirpath: str,
+    experiment_fpath: Optional[str],
+    experiment_dir: Optional[str],
 ):
     assert os.path.isdir(
         cora_matlab_dirpath
@@ -41,12 +23,55 @@ def run_cora(
 
     if experiment_fpath is None:
         assert experiment_dir is not None
-        experiment_fpath = os.path.join(experiment_dir, "factor_graph.mat")
+        experiment_fpath = os.path.join(experiment_dir, "factor_graph.pyfg")
 
     assert os.path.isfile(
         experiment_fpath
     ), f"Experiment file does not exist: {experiment_fpath}"
 
+    return True
+
+
+def get_experiment_fpath(
+    experiment_fpath: Optional[str], experiment_dir: Optional[str]
+):
+    if experiment_fpath is None:
+        assert experiment_dir is not None
+        experiment_fpath = os.path.join(experiment_dir, "factor_graph.pyfg")
+    return experiment_fpath
+
+
+def setup_matlab_engine(cora_matlab_dirpath: str):
+    # start MATLAB engine
+    eng = matlab.engine.start_matlab()
+
+    cora_dir = os.path.join(cora_matlab_dirpath)
+    eng.cd(cora_dir, nargout=0)
+
+    # add all subdirectories to the MATLAB path
+    eng.addpath(eng.genpath(cora_dir), nargout=0)
+    return eng
+
+
+def run_cora(
+    cora_matlab_dirpath: str = os.path.expanduser(
+        "~/range-only-slam-mission-control/cora/MATLAB"
+    ),
+    experiment_fpath: Optional[str] = None,
+    experiment_dir: Optional[str] = None,
+    show_animation: bool = True,
+    animation_show_gt: bool = True,
+    look_for_cached_cora_solns: bool = False,
+    solve_marginalized_problem: bool = False,
+    save_iterates_info: bool = True,
+):
+    assert experiment_inputs_are_valid(
+        cora_matlab_dirpath, experiment_fpath, experiment_dir
+    )
+
+    experiment_fpath = get_experiment_fpath(experiment_fpath, experiment_dir)
+
+    # check if we can skip CORA
     if look_for_cached_cora_solns and not show_animation:
         try:
             check_dir_ready_for_evaluation(experiment_dir)
@@ -57,20 +82,13 @@ def run_cora(
         except FileNotFoundError:
             pass
 
-    # start MATLAB engine
-    eng = matlab.engine.start_matlab()
-
-    cora_dir = os.path.join(cora_matlab_dirpath)
-    eng.cd(cora_dir, nargout=0)
-
-    # add all subdirectories to the MATLAB path
-    eng.addpath(eng.genpath(cora_dir), nargout=0)
-
-    # run the Python/MATLAB entry point script for CORA
+    eng = setup_matlab_engine(cora_matlab_dirpath)
     eng.cora_python_interface(
         experiment_fpath,
         show_animation,
         animation_show_gt,
         look_for_cached_cora_solns,
+        solve_marginalized_problem,
+        save_iterates_info,
         nargout=0,
     )
