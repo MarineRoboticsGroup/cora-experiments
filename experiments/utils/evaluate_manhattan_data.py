@@ -630,15 +630,26 @@ class SubExperimentSuboptResults:
     @property
     def suboptimality_gaps(self) -> List[float]:
         gaps = [
-            final_cost - certified_lower_bound
+            (final_cost - certified_lower_bound) / certified_lower_bound * 100
             for final_cost, certified_lower_bound in zip(
                 self.final_costs, self.certified_lower_bounds
             )
         ]
 
-        # smallest allowed gap is 0
         gaps = [max(0, gap) for gap in gaps]
         return gaps
+
+    def num_zero_gap_experiments(self, zero_eps=1e-4) -> int:
+        zero_gaps = [gap / 100 < zero_eps for gap in self.suboptimality_gaps]
+        zero_gap_cnt = sum(zero_gaps)
+        assert isinstance(zero_gap_cnt, int)
+        return zero_gap_cnt
+
+    @property
+    def num_experiments(self) -> int:
+        n = len(self.param_list)
+        assert isinstance(n, int)
+        return n
 
     def add_experimental_result(
         self, param: Any, certified_lower_bound: float, final_cost: float
@@ -646,9 +657,6 @@ class SubExperimentSuboptResults:
         self.param_list.append(param)
         self.certified_lower_bounds.append(certified_lower_bound)
         self.final_costs.append(final_cost)
-
-    def num_experiments(self) -> int:
-        return len(self.param_list)
 
     def results_to_df(self) -> pd.DataFrame:
         df = pd.DataFrame(
@@ -687,6 +695,26 @@ def _plot_subopt_results(
     print(
         f"Plotting {subexperiment_type} results with loop closures: {loop_closure_status}"
     )
+
+    zero_eps = 1e-5
+    num_zero_gap_experiments = subopt_results.num_zero_gap_experiments(
+        zero_eps=zero_eps
+    )
+    num_experiments = subopt_results.num_experiments
+    assert isinstance(num_zero_gap_experiments, int) and isinstance(
+        num_experiments, int
+    ), f"Invalid number of experiments: {num_zero_gap_experiments}, {num_experiments}"
+    assert num_zero_gap_experiments <= num_experiments
+    print()
+    print(f"Computing tightness of optimality gap with zero eps: {zero_eps}")
+    print(
+        f"Number of experiments with zero gap: {num_zero_gap_experiments} / {num_experiments}"
+    )
+    print(
+        f"Percentage of experiments with zero gap: {num_zero_gap_experiments / num_experiments * 100:.2f}%"
+    )
+    print()
+
     results_df = subopt_results.results_to_df()
 
     # Set the style of seaborn for better visualization
@@ -701,12 +729,29 @@ def _plot_subopt_results(
     # sns.boxplot(x=results_df.index, y=SUBOPT_GAP_LABEL, data=results_df)
 
     # plot as line plot with shading of confidence interval
-    sns.lineplot(
+    # sns.lineplot(
+    #     x=results_df.index,
+    #     y=SUBOPT_GAP_LABEL,
+    #     data=results_df,
+    #     ax=ax,
+    # )
+
+    # plot as violin plots, with separate violing for each index
+    # all colors should be the same
+    sns.violinplot(
         x=results_df.index,
         y=SUBOPT_GAP_LABEL,
         data=results_df,
         ax=ax,
+        # hue="smoker",
+        palette="muted",
+        split=True,
+        cut=0,
+        # color="tab:violet",
     )
+
+    # if results_df.index == "sweep_num_beacons":
+    # print(results_df.head())
 
     # xticks should be all integers
     ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
@@ -719,8 +764,8 @@ def _plot_subopt_results(
     ax.tick_params(axis="both", which="major", labelsize=18)
 
     # set the xlimits tight to the data
-    xmin, xmax = min(results_df.index), max(results_df.index)
-    ax.set_xlim(xmin, xmax)
+    # xmin, xmax = min(results_df.index), max(results_df.index)
+    # ax.set_xlim(xmin, xmax)
 
     # Set title and labels for the plot
     if using_outside_ax:
@@ -789,7 +834,7 @@ def make_manhattan_subopt_plots(
                 except ValueError as e:
                     logger.info(e)
 
-            if subexp_results.num_experiments() == 0:
+            if subexp_results.num_experiments == 0:
                 raise ValueError(
                     f"No experiments found for {loop_closure_option} {sub_exp}"
                 )
@@ -844,8 +889,8 @@ def make_manhattan_subopt_plots(
         )
 
     savedir = "/home/alan/rss23-ra-slam-certification/figures/experiments/manhattan"
-    fpath = join(savedir, "suboptimality_gap_vs_params.png")
-    plt.savefig(fpath)
+    fpath = join(savedir, "suboptimality_gap_vs_params_violin.png")
+    # plt.savefig(fpath)
     print(f"Saved suboptimality plots to {fpath}")
 
     plt.show()
