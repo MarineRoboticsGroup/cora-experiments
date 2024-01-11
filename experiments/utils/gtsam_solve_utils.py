@@ -12,6 +12,8 @@ try:
     from score.utils.gurobi_utils import QCQP_RELAXATION
 
     SCORE_AVAILABLE = True
+    SCORE_AVAILABLE = False
+    logger.warning("Setting SCORE_AVAILABLE to False")
 except ImportError:
     logger.warning(
         "Could not import SCORE (https://github.com/MarineRoboticsGroup/score)"
@@ -99,6 +101,9 @@ def write_gtsam_optimized_soln_to_tum(
         )
     else:
         gtsam_result = solve_mle_gtsam(fg, solver_params, solver=LM_SOLVER)
+
+    # from py_factor_graph.utils.plot_utils import visualize_solution
+    # visualize_solution(gtsam_result)
 
     tum_fpath = join(results_dir, f"{init_strategy}.tum")
     tum_files = save_to_tum(gtsam_result, tum_fpath)

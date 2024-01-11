@@ -6,6 +6,7 @@ from typing import List, Dict, Optional, Tuple
 import numpy as np
 
 from py_factor_graph.io.pyfg_text import read_from_pyfg_text
+from py_factor_graph.factor_graph import FactorGraphData
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 import pandas as pd
@@ -15,7 +16,22 @@ from evo.core.trajectory import PoseTrajectory3D
 from evo.core.geometry import umeyama_alignment
 
 from .gtsam_solve_utils import write_gtsam_optimized_soln_to_tum
-from .logging_utils import logger
+
+import logging
+import coloredlogs
+
+logger = logging.getLogger(__name__)
+field_styles = {
+    "filename": {"color": "green"},
+    "levelname": {"bold": True, "color": "black"},
+    "name": {"color": "blue"},
+}
+coloredlogs.install(
+    logger=logger,
+    level="INFO",
+    fmt="[%(filename)s:%(lineno)d] %(name)s %(levelname)s - %(message)s",
+    field_styles=field_styles,
+)
 
 from attrs import define, field
 
@@ -53,6 +69,21 @@ if not SCORE_AVAILABLE:
 ALL_LEADING_STRS = [CORA_STR, GT_STR] + GTSAM_LEADING_STRS
 
 #### File Path Construction ####
+
+
+def _determine_gtsam_experiments_to_run(pyfg: FactorGraphData) -> List[str]:
+    gtsam_experiments = copy.deepcopy(GTSAM_LEADING_STRS)
+    if pyfg.num_robots == 1:
+        gtsam_experiments.remove(GTSAM_RAND_POSE_RAND_LAND)
+        gtsam_experiments.remove(GTSAM_RAND_POSE_GT_LAND)
+        logger.debug(
+            f"Single robot problem, not testing with random pose initializations"
+        )
+    else:
+        logger.debug(
+            f"Multirobot problem, also testing with {GTSAM_RAND_POSE_RAND_LAND}"
+        )
+    return gtsam_experiments
 
 
 def _get_joined_tum_fpath(results_dir: str, leading_str: str) -> str:
@@ -394,18 +425,7 @@ def get_aligned_traj_results_in_dir(
         if _should_write_new_tum_files(GT_STR, use_cached_results, num_robots):
             pyfg.write_pose_gt_to_tum(results_dir)
 
-        gtsam_experiments = copy.deepcopy(GTSAM_LEADING_STRS)
-        if pyfg.num_robots == 1:
-            gtsam_experiments.remove(GTSAM_RAND_POSE_RAND_LAND)
-            gtsam_experiments.remove(GTSAM_RAND_POSE_GT_LAND)
-            logger.debug(
-                f"Single robot problem, not testing with random pose initializations"
-            )
-        else:
-            logger.debug(
-                f"Multirobot problem, also testing with {GTSAM_RAND_POSE_RAND_LAND}"
-            )
-
+        gtsam_experiments = _determine_gtsam_experiments_to_run(pyfg)
         for gtsam_leading_str in gtsam_experiments:
             if _should_write_new_tum_files(
                 gtsam_leading_str, use_cached_results, num_robots

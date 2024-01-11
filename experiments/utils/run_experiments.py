@@ -129,35 +129,6 @@ def run_experiments(
 ):
     assert all([len(noise_vals) == 2 for exp_dir, noise_vals in experiments.items()])
 
-    # make noisy copies of problem and save
-    for exp_dir, noise_mods in experiments.items():
-        if not config.run_experiments_with_added_noise and "modified" in exp_dir:
-            print(
-                f"Skipping {exp_dir} because config.run_experiments_with_added_noise is False"
-            )
-            continue
-
-        _generate_noisy_problem(
-            base_pyfg,
-            noise_mods,
-            exp_dir,
-            config.use_cached_problems,
-            animate_trajs=config.animate_trajs,
-        )
-
-    # run CORA on the problems
-    for exp_dir in experiments.keys():
-        if not config.run_cora:
-            continue
-
-        run_cora(
-            experiment_dir=exp_dir,
-            show_animation=config.show_solver_animation,
-            animation_show_gt=config.show_gt_cora_animation,
-            look_for_cached_cora_solns=config.look_for_cached_cora_solns,
-            solve_marginalized_problem=config.solve_marginalized_problem,
-        )
-
     # evaluate results
     for exp_dir in experiments.keys():
         if not config.perform_evaluation:
