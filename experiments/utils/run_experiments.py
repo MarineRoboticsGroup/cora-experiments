@@ -60,14 +60,14 @@ def _perform_evaluation(
     aligned_trajs = get_aligned_traj_results_in_dir(
         eval_dir, use_cached_results=use_cached_trajs
     )
-    make_evo_traj_plots(
-        aligned_trajs,
-        eval_dir,
-        show_plots=True,
-        valid_plot_views=desired_plot_modes,
-        overlay_river_image=overlay_river_map,
-    )
-    make_evo_ape_plots_from_trajs(aligned_trajs, eval_dir, show_plots=False)
+    # make_evo_traj_plots(
+    #     aligned_trajs,
+    #     eval_dir,
+    #     show_plots=True,
+    #     valid_plot_views=desired_plot_modes,
+    #     overlay_river_image=overlay_river_map,
+    # )
+    make_evo_ape_plots_from_trajs(aligned_trajs, eval_dir, show_plots=True)
 
 
 @define

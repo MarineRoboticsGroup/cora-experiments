@@ -55,7 +55,7 @@ def setup_matlab_engine(cora_matlab_dirpath: str):
 
 def run_cora(
     cora_matlab_dirpath: str = os.path.expanduser(
-        "~/range-only-slam-mission-control/cora/MATLAB"
+        "~/range-only-slam-mission-control/cora-matlab/MATLAB"
     ),
     experiment_fpath: Optional[str] = None,
     experiment_dir: Optional[str] = None,
@@ -81,6 +81,9 @@ def run_cora(
             return
         except FileNotFoundError:
             pass
+
+    #  function cora_python_interface(problem_fpath, show_animation, animation_show_gt, look_for_cached_soln, solve_marginalized_problem, save_iterates_info)   
+    print(f"cora_python_interface(\"{experiment_fpath}\", {show_animation}, {animation_show_gt}, {look_for_cached_cora_solns}, {solve_marginalized_problem}, {save_iterates_info})")
 
     eng = setup_matlab_engine(cora_matlab_dirpath)
     eng.cora_python_interface(

@@ -76,7 +76,7 @@ def _get_tum_fpaths(results_dir: str, leading_str: str, num_robots: int) -> List
     """
     assert leading_str in ALL_LEADING_STRS
     if leading_str == CORA_STR:
-        trailing_chars = [f"{c}" for c in range(1, num_robots + 1)]
+        trailing_chars = [f"{c}" for c in range(0, num_robots)]
     else:
         trailing_chars = VALID_ROBOT_CHARS[:num_robots]
     tum_paths = [join(results_dir, f"{leading_str}_{c}.tum") for c in trailing_chars]
@@ -162,7 +162,9 @@ class ResultsPoseTrajCollection:
         assert (
             len(sorted_comp_trajs) == len(sorted_comp_names) == len(sorted_comp_colors)
         )
-        assert all([isinstance(traj, PoseTrajectory3D) for traj in sorted_comp_trajs])
+        assert all(
+            [isinstance(traj, PoseTrajectory3D) for traj in sorted_comp_trajs]
+        ), f"Types: {[type(traj) for traj in sorted_comp_trajs]}"
         assert all([name in PREFERRED_LABEL_ORDERING for name in sorted_comp_names])
         assert all(
             [color in TRAJ_LABEL_TO_COLOR.values() for color in sorted_comp_colors]
@@ -189,6 +191,8 @@ class ResultsPoseTrajCollection:
 
         if self.gtsam_score_traj is not None:
             comparison_trajs.append(self.gtsam_score_traj)
+
+        assert all([isinstance(traj, PoseTrajectory3D) for traj in comparison_trajs])
 
         return comparison_trajs
 
@@ -395,7 +399,7 @@ def get_aligned_traj_results_in_dir(
             pyfg.write_pose_gt_to_tum(results_dir)
 
         gtsam_experiments = copy.deepcopy(GTSAM_LEADING_STRS)
-        if pyfg.num_robots == 1:
+        if num_robots == 1:
             gtsam_experiments.remove(GTSAM_RAND_POSE_RAND_LAND)
             gtsam_experiments.remove(GTSAM_RAND_POSE_GT_LAND)
             logger.debug(
@@ -477,10 +481,16 @@ def get_aligned_traj_results_in_dir(
 
         # align the trajectories to the ground truth
         def _get_aligned_traj(ref_traj: PoseTrajectory3D, traj: PoseTrajectory3D):
+
+            # traj.align_origin(ref_traj)
+            # return traj
+
             traj_aligned = copy.deepcopy(traj)
             align_rot, align_trans, _ = umeyama_alignment(
                 traj_aligned.positions_xyz.T, ref_traj.positions_xyz.T
             )
+
+            # align by matching the starting positions
 
             # if 2D problem and the rotation flips around z, then let's just
             # align to the origin. We encountered this problem with sufficiently
@@ -575,13 +585,15 @@ def make_evo_traj_plots(
         # make 1xn grid of axes
         num_plots = aligned_results.num_comp_trajs
         axes_idxs = list(range(num_plots))
-        if num_plots <= 4:
+        if num_plots <= 3:
             num_rows = 1
             num_cols = num_plots
         else:
             num_rows = 2
-            num_cols = num_plots // 2
+            num_cols = np.ceil(num_plots / 2).astype(int)
 
+        print(f"Making plot with {num_rows}x{num_cols} subplots")
+        print(f"Axes idxs: {axes_idxs}")
         subplot_args = [int(f"{num_rows}{num_cols}{i+1}") for i in axes_idxs]
         axes = [
             plot.prepare_axis(fig, plot_mode, subplot_arg=subplot_arg)
@@ -830,7 +842,7 @@ def make_plots_from_error_dfs(
     error_dfs: TrajErrorDfs,
     comparison_traj_color_map: Dict[str, str],
     save_dir: str,
-    show_plots: bool = False,
+    show_plots: bool = True,
 ):
     #               rmse      mean    median       std       min       max          sse
     # CORA      0.536588  0.502224  0.477673  0.188938  0.048637  0.923781   505.023905
@@ -916,7 +928,7 @@ def make_evo_ape_plots_from_trajs(
     aligned_results: ResultsPoseTrajCollection,
     results_dir: str,
     use_cached_error_dfs: bool = False,
-    show_plots: bool = False,
+    show_plots: bool = True,
 ):
     collected_error_dfs = get_ape_error_stats_from_aligned_trajs(
         aligned_results, results_dir, use_cached_error_dfs

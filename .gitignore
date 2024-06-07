@@ -1,6 +1,7 @@
 *.csv
 ./**/modified/*
 *.npy
+*.tum*
 
 #
 # OS generated files #

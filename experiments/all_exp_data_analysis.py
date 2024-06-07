@@ -4,12 +4,22 @@ PLAZA2_DIRNAME = "plaza/plaza2"
 SINGLE_DRONE_DIRNAME = "single_drone"
 TIERS_DIRNAME = "tiers"
 MULTI_ROBOT_EXPERIMENTS = [TIERS_DIRNAME]
+MRCLAM_EXPERIMENTS = [
+    "mrclam2",
+    "mrclam4",
+    "mrclam6",
+    "mrclam7",
+]
 EXPERIMENT_NAMING = {
     MARINE_DIRNAME: "Marine",
     PLAZA1_DIRNAME: "Plaza 1",
     PLAZA2_DIRNAME: "Plaza 2",
     SINGLE_DRONE_DIRNAME: "Single Drone",
     TIERS_DIRNAME: "TIERS",
+    "mrclam2": "MR.CLAM 2",
+    "mrclam4": "MR.CLAM 4",
+    "mrclam6": "MR.CLAM 6",
+    "mrclam7": "MR.CLAM 7",
 }
 
 import itertools
@@ -56,7 +66,7 @@ class NamedResults:
         indices_to_plot = self.results.rot_error_df.index.drop("Max")
         plot_df = self.results.trans_error_df.loc[indices_to_plot]
         plot_df.plot.bar(
-            ax=target_ax, ylabel="Translation RMSE (meters)", color=self.results.cmap
+            ax=target_ax, ylabel="Trans. RMSE (meters)", color=self.results.cmap
         )
         ylim_top_min = 3.0
         if target_ax.get_ylim()[1] < ylim_top_min:
@@ -72,7 +82,7 @@ class NamedResults:
         plot_df = self.results.rot_error_df.loc[indices_to_plot]
         plot_df.plot.bar(
             ax=target_ax,
-            ylabel="Rotation RMSE (deg)",
+            ylabel="Rot. RMSE (deg)",
             color=self.results.cmap,
         )
         target_ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
@@ -335,14 +345,40 @@ def _plot_named_results_on_same_axis(
     joined_rot_rmse = _reorder_cols_according_to_preferred_ordering(joined_results[0])
     joined_trans_rmse = _reorder_cols_according_to_preferred_ordering(joined_results[1])
 
+    # print all of the data in rot/trans rmse
+    print("Rotation RMSE")
+    print(joined_rot_rmse)
+
+    print("Translation RMSE")
+    print(joined_trans_rmse)
+
+    # if mr clam experiments, set flag
+    is_mr_clam = all([exp_name.startswith("MR.CLAM") for exp_name in joined_rot_rmse.index])
+    print(f"Is MR.CLAM: {is_mr_clam}")
+
+    # if MR.CLAM, let's only name the experiments by their number and set a subtitle
+    # that says MR.CLAM
+    if is_mr_clam:
+        joined_rot_rmse.index = [exp_name.split()[-1] for exp_name in joined_rot_rmse.index]
+        joined_trans_rmse.index = [exp_name.split()[-1] for exp_name in joined_trans_rmse.index]
+        title_name = "MR.CLAM"
+    else:
+        title_name = None
+
+
     # make a bar plot of the rotation and translation error
     # fig, axes = plt.subplots(2, 1, figsize=(12, 6))
-    fig, axes = plt.subplots(2, 1)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     colormap = named_results[0].results.cmap
-    joined_rot_rmse.plot.bar(ax=axes[0], ylabel="Rotation RMSE (deg)", color=colormap)
+    joined_rot_rmse.plot.bar(ax=axes[0], ylabel="Rotational RMSE (deg)", color=colormap)
     joined_trans_rmse.plot.bar(
-        ax=axes[1], ylabel="Translation RMSE (meter)", color=colormap
+        ax=axes[1], ylabel="Translational RMSE (meter)", color=colormap
     )
+
+    # get the max y value in the rotation and translation plots
+    rot_max_y = joined_rot_rmse.max().max()
+    trans_max_y = joined_trans_rmse.max().max()
+
     # _add_titles_above_top_row(axes, named_results)
     _remove_all_vertical_gridlines(axes)
     _rotate_xticklabels(axes)
@@ -367,7 +403,9 @@ def _plot_named_results_on_same_axis(
     for ax in axes:
         assert isinstance(ax, plt.Axes)
         ax_ymin, ax_ymax = ax.get_ylim()
-        ax.set_ylim(ax_ymin, ax_ymax * 7.0)
+        print(ax_ymax)
+        ax_ymin = min(ax_ymin, 1e-1)
+        ax.set_ylim(ax_ymin, ax_ymax*1.5)
 
         # move the legend up and break it into two rows
         num_legend_rows = 2
@@ -392,6 +430,13 @@ def _plot_named_results_on_same_axis(
     # make sure y-axis labels are aligned
     fig.align_ylabels(axes)
 
+    # below the plot, add a title
+    if title_name is not None:
+        # Adjust layout to make room for the title
+        # plt.tight_layout(rect=[0, 0.0, 1, .95])
+        plt.tight_layout(rect=[0, 0.05, 1, 1])
+        fig.suptitle(title_name, fontsize=16,  y=0.05)
+
     if savepath is not None:
         fig.savefig(savepath, dpi=300)
         print(f"Saved plot to {savepath}")
@@ -412,25 +457,35 @@ if __name__ == "__main__":
         PLAZA1_DIRNAME,
         PLAZA2_DIRNAME,
     ]
-    single_robot_results = _get_experiment_named_results(
-        exp_list=single_robot_exps,
-        use_cached_trajs=use_cached_trajs,
-        use_cached_error_dfs=use_cached_error_dfs,
-    )
-    single_robot_plot_fpath = join(DATA_DIR, "single_robot_results.png")
-    _plot_named_results_on_same_axis(
-        single_robot_results,
-        ylog=True,
-        savepath=single_robot_plot_fpath,
-        show=show_plots,
-    )
+    # single_robot_results = _get_experiment_named_results(
+    #     exp_list=single_robot_exps,
+    #     use_cached_trajs=use_cached_trajs,
+    #     use_cached_error_dfs=use_cached_error_dfs,
+    # )
+    # single_robot_plot_fpath = join(DATA_DIR, "single_robot_results.png")
+    # _plot_named_results_on_same_axis(
+    #     single_robot_results,
+    #     ylog=True,
+    #     savepath=single_robot_plot_fpath,
+    #     show=show_plots,
+    # )
 
-    multi_robot_results = _get_experiment_named_results(
-        exp_list=MULTI_ROBOT_EXPERIMENTS,
+    # multi_robot_results = _get_experiment_named_results(
+    #     exp_list=MULTI_ROBOT_EXPERIMENTS,
+    #     use_cached_trajs=use_cached_trajs,
+    #     use_cached_error_dfs=use_cached_error_dfs,
+    # )
+    # multi_robot_plot_fpath = join(DATA_DIR, "multi_robot_results.png")
+    # _plot_named_results_on_same_axis(
+    #     multi_robot_results, ylog=True, savepath=multi_robot_plot_fpath, show=show_plots
+    # )
+
+    mrclam_results = _get_experiment_named_results(
+        exp_list=MRCLAM_EXPERIMENTS,
         use_cached_trajs=use_cached_trajs,
         use_cached_error_dfs=use_cached_error_dfs,
     )
-    multi_robot_plot_fpath = join(DATA_DIR, "multi_robot_results.png")
+    mrclam_plot_fpath = join(DATA_DIR, "mrclam_results.png")
     _plot_named_results_on_same_axis(
-        multi_robot_results, ylog=True, savepath=multi_robot_plot_fpath, show=show_plots
+        mrclam_results, ylog=False, savepath=mrclam_plot_fpath, show=show_plots
     )

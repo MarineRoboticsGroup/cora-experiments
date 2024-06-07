@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     # parse the single_drone data
     SINGLE_DRONE_DIR = join(DATA_DIR, "single_drone")
-    experiment_file = join(SINGLE_DRONE_DIR, "single_drone.pyfg")
+    experiment_file = join(SINGLE_DRONE_DIR, "factor_graph.pyfg")
     pyfg = read_from_pyfg_text(experiment_file)
 
     # run the experiments
