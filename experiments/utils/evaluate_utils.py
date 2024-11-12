@@ -21,6 +21,11 @@ from attrs import define, field
 
 from functools import partial
 
+import cartopy.crs as ccrs
+import cartopy.io.img_tiles as cimgt
+import pymap3d as pm
+
+
 VALID_ROBOT_CHARS = [chr(ord("A") + i) for i in range(26)]
 VALID_ROBOT_CHARS.remove("L")
 
@@ -46,6 +51,9 @@ GTSAM_LEADING_STRS = [
 
 # only add the score string if score is available
 from .gtsam_solve_utils import SCORE_AVAILABLE
+
+# SCORE_AVAILABLE = False
+# logger.warning("FORCE DISABLING SCORE")
 
 if not SCORE_AVAILABLE:
     GTSAM_LEADING_STRS.remove(GTSAM_SCORE_INIT)
@@ -550,10 +558,17 @@ def make_evo_traj_plots(
         results_dir (str): the directory to save the plots
         show_plots (bool, optional): whether to show the plots. Defaults to False.
     """
+    # make 1xn grid of axes
+    num_plots = aligned_results.num_comp_trajs
+    axes_idxs = list(range(num_plots))
+    if num_plots <= 3:
+        num_rows = 1
+        num_cols = num_plots
+    else:
+        num_rows = 2
+        num_cols = np.ceil(num_plots / 2).astype(int)
 
     for plot_mode in valid_plot_views:
-        # make figure the full screen size
-        fig = plt.figure(figsize=(20, 10))
 
         def _improve_plot_config():
             # increase linewidth and font size
@@ -582,26 +597,47 @@ def make_evo_traj_plots(
 
         _improve_plot_config()
 
-        # make 1xn grid of axes
-        num_plots = aligned_results.num_comp_trajs
-        axes_idxs = list(range(num_plots))
-        if num_plots <= 3:
-            num_rows = 1
-            num_cols = num_plots
-        else:
-            num_rows = 2
-            num_cols = np.ceil(num_plots / 2).astype(int)
+        # make figure the full screen size
+        if overlay_river_image:
+            fig, axes = plt.subplots(
+                num_rows,
+                num_cols,
+                figsize=(20, 10),
+                subplot_kw={"projection": ccrs.PlateCarree()},
+            )
+            axes = [axes] if num_plots == 1 else axes.flatten()
 
-        print(f"Making plot with {num_rows}x{num_cols} subplots")
-        print(f"Axes idxs: {axes_idxs}")
-        subplot_args = [int(f"{num_rows}{num_cols}{i+1}") for i in axes_idxs]
-        axes = [
-            plot.prepare_axis(fig, plot_mode, subplot_arg=subplot_arg)
-            for subplot_arg in subplot_args
-        ]
+        else:
+
+            fig = plt.figure(figsize=(20, 10))
+            print(f"Making plot with {num_rows}x{num_cols} subplots")
+            print(f"Axes idxs: {axes_idxs}")
+            subplot_args = [int(f"{num_rows}{num_cols}{i+1}") for i in axes_idxs]
+            axes = [
+                plot.prepare_axis(fig, plot_mode, subplot_arg=subplot_arg)
+                for subplot_arg in subplot_args
+            ]
+
+        # Lat: 42.35807418823242, Lon: -71.08699035644531
+        base_lon = -71.08699035644531
+        base_lat = 42.35807418823242
+        tiler_style = "satellite"
+        tiler = cimgt.GoogleTiles(style=tiler_style, cache=True)
+
+        # draw the x/y positions of the robot
+        def convert_latlon_to_xy(lat, lon):
+            return pm.geodetic2enu(lat, lon, 0.0, base_lat, base_lon, 0.0)
+
+        def convert_xy_to_latlon(x, y):
+            return pm.enu2geodetic(x, y, 0.0, base_lat, base_lon, 0.0)
 
         def _plot_traj(
-            ax: plt.Axes, traj: PoseTrajectory3D, name: str, color: str, style: str
+            ax: plt.Axes,
+            traj: PoseTrajectory3D,
+            name: str,
+            color: str,
+            style: str,
+            overlay_river_image: bool = False,
         ):
             # find places where timestamps are not monotonically increasing, this
             # is where a new trajectory starts
@@ -624,6 +660,29 @@ def make_evo_traj_plots(
             for traj_cnt, separate_traj in enumerate(separate_trajs):
                 x = separate_traj[:, x_idx]
                 y = separate_traj[:, y_idx]
+
+                if overlay_river_image:
+                    lat_lons = [convert_xy_to_latlon(x, y) for x, y in zip(x, y)]
+                    lats, lons, _ = zip(*lat_lons)
+                    ax.add_image(tiler, 20)
+                    ax.plot(
+                        lons,
+                        lats,
+                        style,
+                        color=color,
+                        label=name if traj_cnt == 0 else None,
+                        transform=ccrs.PlateCarree(),
+                    )
+                    ax.set_extent(
+                        [
+                            -71.08999107262918,
+                            -71.08631488034362,
+                            42.356811248659724,
+                            42.35857418823244,
+                        ]
+                    )
+                    continue
+
                 if plot_mode == plot.PlotMode.xyz:
                     z = separate_traj[:, z_idx]
                     ax.plot(
@@ -655,40 +714,13 @@ def make_evo_traj_plots(
             ordered_comparison_colors,
         ):
             ax = axes[idx]
-            _plot_traj(ax, gt_traj, gt_traj_name, gt_traj_color, "--")
-            _plot_traj(ax, traj, name, color, "-")
+            _plot_traj(
+                ax, gt_traj, gt_traj_name, gt_traj_color, "--", overlay_river_image
+            )
+            _plot_traj(ax, traj, name, color, "-", overlay_river_image)
             ax.legend(frameon=True)
 
             ax.set_facecolor("white")
-
-        if overlay_river_image:
-            from .paths import DATA_DIR
-
-            river_image_path = join(DATA_DIR, "river_img.png")
-            river_image_path = join(DATA_DIR, "river_2.png")
-            river_img = plt.imread(river_image_path)
-            # trim the top 10 pixels
-            river_img = river_img[10:, :, :]
-
-            xmin = -250
-            xmax = 50
-            ymin = -110
-            ymax = 50
-
-            # show the image with no padding
-            for idx in axes_idxs:
-                ax = axes[idx]
-                ax.imshow(river_img, extent=[xmin, xmax, ymin, ymax], alpha=1, zorder=0)
-
-                # move the lines to the front (but with room for the legend)
-                for line in ax.lines:
-                    line.set_zorder(10)
-
-                # make sure the legend is on top
-                ax.get_legend().set_zorder(20)
-
-            # reduce padding or buffer between plots
-            plt.subplots_adjust(left=0.10, right=0.95, wspace=0.05)
 
         # make all axes the same size
         ax_xmin, ax_xmax = axes[0].get_xlim()
@@ -737,6 +769,9 @@ def make_evo_traj_plots(
             partial(shift_formatter, ax_xmin, x_tick_increment)
         )
         for idx, ax in enumerate(axes):
+            if overlay_river_image:
+                continue
+
             cur_row = idx // num_cols
             cur_col = idx % num_cols
 
