@@ -15,7 +15,9 @@ from evo.core.trajectory import PoseTrajectory3D
 from evo.core.geometry import umeyama_alignment
 
 from .gtsam_solve_utils import write_gtsam_optimized_soln_to_tum
-from .logging_utils import logger
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 from attrs import define, field
 
@@ -52,8 +54,8 @@ GTSAM_LEADING_STRS = [
 # only add the score string if score is available
 from .gtsam_solve_utils import SCORE_AVAILABLE
 
-# SCORE_AVAILABLE = False
-# logger.warning("FORCE DISABLING SCORE")
+SCORE_AVAILABLE = False
+logger.warning("FORCE DISABLING SCORE")
 
 if not SCORE_AVAILABLE:
     GTSAM_LEADING_STRS.remove(GTSAM_SCORE_INIT)
@@ -373,10 +375,11 @@ def check_dir_ready_for_evaluation(target_dir: str) -> None:
 def get_aligned_traj_results_in_dir(
     results_dir: str, use_cached_results: bool
 ) -> ResultsPoseTrajCollection:
+    logger.info(f"Getting aligned results in {results_dir}")
     check_dir_ready_for_evaluation(results_dir)
     aligned_results_pickle_path = join(results_dir, ALIGNED_RESULTS_FNAME)
     if exists(aligned_results_pickle_path) and use_cached_results:
-        logger.debug(
+        logger.info(
             f"Found cached aligned results, loading from {aligned_results_pickle_path}"
         )
         aligned_results = pickle.load(open(aligned_results_pickle_path, "rb"))
@@ -494,9 +497,14 @@ def get_aligned_traj_results_in_dir(
             # return traj
 
             traj_aligned = copy.deepcopy(traj)
-            align_rot, align_trans, _ = umeyama_alignment(
-                traj_aligned.positions_xyz.T, ref_traj.positions_xyz.T
-            )
+            try:
+
+                align_rot, align_trans, _ = umeyama_alignment(
+                    traj_aligned.positions_xyz.T, ref_traj.positions_xyz.T
+                )
+            except Exception as e:
+                logger.error(f"Error aligning {traj_aligned} to {ref_traj}: {e}")
+                raise e
 
             # align by matching the starting positions
 
@@ -597,13 +605,26 @@ def make_evo_traj_plots(
 
         _improve_plot_config()
 
+        # Lat: 42.35807418823242, Lon: -71.08699035644531
+        base_lon = -71.08699035644531
+        base_lat = 42.35807418823242
+        tiler_style = "satellite"
+        tiler_style = "terrain"
+        tiler_style = "street"
+        # tiler_style = "only_streets"
+        tiler = cimgt.GoogleTiles(style=tiler_style, cache=False)
+        tile_zoom = 20
+
+        # tiler = cimgt.Stamen("terrain-background")
+        # tiler = cimgt.OSM()
+
         # make figure the full screen size
         if overlay_river_image:
             fig, axes = plt.subplots(
                 num_rows,
                 num_cols,
                 figsize=(20, 10),
-                subplot_kw={"projection": ccrs.PlateCarree()},
+                subplot_kw={"projection": tiler.crs},
             )
             axes = [axes] if num_plots == 1 else axes.flatten()
 
@@ -617,12 +638,6 @@ def make_evo_traj_plots(
                 plot.prepare_axis(fig, plot_mode, subplot_arg=subplot_arg)
                 for subplot_arg in subplot_args
             ]
-
-        # Lat: 42.35807418823242, Lon: -71.08699035644531
-        base_lon = -71.08699035644531
-        base_lat = 42.35807418823242
-        tiler_style = "satellite"
-        tiler = cimgt.GoogleTiles(style=tiler_style, cache=True)
 
         # draw the x/y positions of the robot
         def convert_latlon_to_xy(lat, lon):
@@ -664,7 +679,7 @@ def make_evo_traj_plots(
                 if overlay_river_image:
                     lat_lons = [convert_xy_to_latlon(x, y) for x, y in zip(x, y)]
                     lats, lons, _ = zip(*lat_lons)
-                    ax.add_image(tiler, 20)
+                    ax.add_image(tiler, tile_zoom)
                     ax.plot(
                         lons,
                         lats,
@@ -722,16 +737,28 @@ def make_evo_traj_plots(
 
             ax.set_facecolor("white")
 
-        # make all axes the same size
-        ax_xmin, ax_xmax = axes[0].get_xlim()
-        ax_ymin, ax_ymax = axes[0].get_ylim()
-        for ax in axes:
-            new_ax_xmin, new_ax_xmax = ax.get_xlim()
-            new_ax_ymin, new_ax_ymax = ax.get_ylim()
-            ax_xmin = min(ax_xmin, new_ax_xmin)
-            ax_xmax = max(ax_xmax, new_ax_xmax)
-            ax_ymin = min(ax_ymin, new_ax_ymin)
-            ax_ymax = max(ax_ymax, new_ax_ymax)
+        # make all axes the same size and not much larger than the data in the
+        # first axis
+        gt_traj_positions = gt_traj.positions_xyz
+        gt_xmin, gt_xmax = np.min(gt_traj_positions[:, 0]), np.max(
+            gt_traj_positions[:, 0]
+        )
+        gt_ymin, gt_ymax = np.min(gt_traj_positions[:, 1]), np.max(
+            gt_traj_positions[:, 1]
+        )
+        xbuffer = (gt_xmax - gt_xmin) * 0.1
+        ybuffer = (gt_ymax - gt_ymin) * 0.1
+        ax_xmin, ax_xmax = gt_xmin - xbuffer, gt_xmax + xbuffer
+        ax_ymin, ax_ymax = gt_ymin - ybuffer, gt_ymax + ybuffer
+        # ax_xmin, ax_xmax = axes[0].get_xlim()
+        # ax_ymin, ax_ymax = axes[0].get_ylim()
+        # for ax in axes:
+        #     new_ax_xmin, new_ax_xmax = ax.get_xlim()
+        #     new_ax_ymin, new_ax_ymax = ax.get_ylim()
+        #     ax_xmin = min(ax_xmin, new_ax_xmin)
+        #     ax_xmax = max(ax_xmax, new_ax_xmax)
+        #     ax_ymin = min(ax_ymin, new_ax_ymin)
+        #     ax_ymax = max(ax_ymax, new_ax_ymax)
 
         # add a bit of padding to the top for the legend
         # (except for when we overlay the river image)
@@ -792,12 +819,13 @@ def make_evo_traj_plots(
                 ax.set_xlabel("")
                 ax.tick_params(axis="x", which="both", length=0)
 
-            plot.set_aspect_equal(ax)
+            # plot.set_aspect_equal(ax)
 
             # make sure grid is on
             ax.grid(True, which="both", axis="both")
 
         traj_plot_path = join(results_dir, f"traj_plot_{plot_mode.name}.png")
+        plt.tight_layout()
         plt.savefig(traj_plot_path, transparent=True, dpi=fig.dpi)
         plt.savefig(
             traj_plot_path.replace(".png", ".svg"),

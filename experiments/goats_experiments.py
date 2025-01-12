@@ -24,6 +24,8 @@ if __name__ == "__main__":
 
         marine_experiment_fpath = join(EXP_DIR, "factor_graph.pyfg")
         pyfg = read_from_pyfg_text(marine_experiment_fpath)
+        # pyfg.animate_odometry(show_gt=True, draw_range_lines=True, num_timesteps_keep_ranges=10)
+
         exp_config = ExperimentConfigs(
             run_experiments_with_added_noise=False,
             use_cached_problems=True,
@@ -34,7 +36,7 @@ if __name__ == "__main__":
             show_gt_cora_animation=True,
             look_for_cached_cora_solns=False,
             perform_evaluation=True,
-            use_cached_trajs=False,
+            use_cached_trajs=True,
             desired_plot_modes=[plot.PlotMode.xy],
             overlay_river_map=False,
         )

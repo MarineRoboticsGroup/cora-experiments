@@ -2,7 +2,9 @@ import matlab.engine
 import os
 from typing import Optional
 from .evaluate_utils import check_dir_ready_for_evaluation
-from .logging_utils import logger
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def experiment_inputs_are_valid(
@@ -82,8 +84,10 @@ def run_cora(
         except FileNotFoundError:
             pass
 
-    #  function cora_python_interface(problem_fpath, show_animation, animation_show_gt, look_for_cached_soln, solve_marginalized_problem, save_iterates_info)   
-    print(f"cora_python_interface(\"{experiment_fpath}\", {show_animation}, {animation_show_gt}, {look_for_cached_cora_solns}, {solve_marginalized_problem}, {save_iterates_info})")
+    #  function cora_python_interface(problem_fpath, show_animation, animation_show_gt, look_for_cached_soln, solve_marginalized_problem, save_iterates_info)
+    print(
+        f'cora_python_interface("{experiment_fpath}", {show_animation}, {animation_show_gt}, {look_for_cached_cora_solns}, {solve_marginalized_problem}, {save_iterates_info})'
+    )
 
     eng = setup_matlab_engine(cora_matlab_dirpath)
     eng.cora_python_interface(

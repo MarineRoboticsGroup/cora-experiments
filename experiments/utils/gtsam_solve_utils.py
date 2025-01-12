@@ -5,7 +5,9 @@ from py_factor_graph.utils.solver_utils import save_to_tum, save_results_to_file
 from ra_slam.solve_mle_gtsam import solve_mle_gtsam
 from ra_slam.utils.gtsam_utils import GtsamSolverParams
 from ra_slam.utils.solver_utils import LM_SOLVER
-from .logging_utils import logger
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 try:
     from score.solve_score import solve_score
